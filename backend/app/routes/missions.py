@@ -6,7 +6,7 @@ import uuid
 from app.core.database import get_db
 from app.models.mission import Mission
 from app.models.reading import Reading
-from app.schemas.mission import MissionCreate, MissionResponse, MissionHistoryItem, MissionAnalytics, FlightAnalytics, EnvironmentalAnalytics, EnvMetric, HotspotAnalytics
+from app.schemas.mission import MissionCreate, MissionResponse, MissionHistoryItem, MissionAnalytics, FlightAnalytics, EnvironmentalAnalytics, EnvMetric, HotspotAnalytics, MissionUpdate
 from app.schemas.reading import PaginatedReadingsResponse, DataQualityStats, ReadingResponse
 from datetime import datetime
 from sqlalchemy import func
@@ -96,6 +96,20 @@ def create_mission(mission_in: MissionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_mission)
     return new_mission
+
+@router.patch("/{mission_id}", response_model=MissionResponse)
+def update_mission(mission_id: str, mission_in: MissionUpdate, db: Session = Depends(get_db)):
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail=f"Mission '{mission_id}' not found")
+    
+    update_data = mission_in.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(mission, field, value)
+        
+    db.commit()
+    db.refresh(mission)
+    return mission
 
 @router.delete("/{mission_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_mission(mission_id: str, db: Session = Depends(get_db)):
@@ -207,6 +221,7 @@ def export_mission_readings(
     pm25_max: float = None,
     sort_by: str = "timestamp",
     sort_order: str = "desc",
+    include_simulation: bool = False,
     db: Session = Depends(get_db)
 ):
     start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00')) if start_time else None
@@ -230,10 +245,17 @@ def export_mission_readings(
         
     readings = base_query.order_by(order_col).all()
     
+    if include_simulation:
+        from app.models.simulation import ResponseSimulation
+        latest_sim = db.query(ResponseSimulation).filter(ResponseSimulation.mission_id == mission_id).order_by(ResponseSimulation.created_at.desc()).first()
+        if latest_sim:
+            sim_readings = db.query(Reading).filter(Reading.mission_id == latest_sim.simulation_id).order_by(order_col).all()
+            readings.extend(sim_readings)
+    
     output = io.StringIO()
     writer = csv.writer(output)
     
-    headers = ["timestamp", "latitude", "longitude", "altitude", "pm1", "pm25", "pm10", "temperature", "humidity", "aqi", "aqi_category"]
+    headers = ["timestamp", "latitude", "longitude", "altitude", "pm1", "pm25", "pm10", "temperature", "humidity", "aqi", "aqi_category", "data_source"]
     writer.writerow(headers)
     
     for r in readings:
@@ -248,7 +270,8 @@ def export_mission_readings(
             r.temperature,
             r.humidity,
             r.aqi,
-            r.aqi_category
+            r.aqi_category,
+            r.data_source
         ])
         
     output.seek(0)
@@ -400,3 +423,79 @@ def get_mission_zones(mission_id: str, db: Session = Depends(get_db)):
     from app.core.config import settings
     
     return calculate_pollution_zones(mission_id, readings, settings)
+
+@router.get("/{mission_id}/intelligence")
+def get_mission_intelligence(mission_id: str, db: Session = Depends(get_db)):
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+        
+    from app.services.pollution_intelligence import generate_pollution_summary
+    try:
+        return generate_pollution_summary(mission_id, db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{mission_id}/live-state")
+def get_mission_live_state(mission_id: str, db: Session = Depends(get_db)):
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+        
+    latest_reading = db.query(Reading).filter(Reading.mission_id == mission_id).order_by(Reading.timestamp.desc()).first()
+    
+    from app.services.alert_engine import detect_alerts
+    from app.services.event_system import generate_events
+    
+    active_alerts = detect_alerts(mission_id, db)
+    events = generate_events(mission_id, db)
+    latest_event = events[0] if events else None
+    
+    return {
+        "mission_id": mission.mission_id,
+        "status": mission.status,
+        "drone_id": mission.drone_id,
+        "latest_timestamp": latest_reading.timestamp.isoformat() if latest_reading else None,
+        "current_location": {
+            "latitude": latest_reading.latitude if latest_reading else None,
+            "longitude": latest_reading.longitude if latest_reading else None
+        },
+        "current_altitude": latest_reading.altitude if latest_reading else None,
+        "current_speed": latest_reading.speed if latest_reading else None,
+        "current_heading": latest_reading.heading if latest_reading else None,
+        "battery": latest_reading.battery if latest_reading else None,
+        "gps_status": latest_reading.gps_status if latest_reading else "NO_SIGNAL",
+        "latest_environment": {
+            "aqi": latest_reading.aqi if latest_reading else None,
+            "aqi_category": latest_reading.aqi_category if latest_reading else "UNKNOWN",
+            "pm25": latest_reading.pm25 if latest_reading else None,
+            "pm10": latest_reading.pm10 if latest_reading else None,
+            "temperature": latest_reading.temperature if latest_reading else None,
+            "humidity": latest_reading.humidity if latest_reading else None
+        },
+        "active_alerts": active_alerts,
+        "latest_event": latest_event
+    }
+
+@router.get("/{mission_id}/events")
+def get_mission_events(mission_id: str, db: Session = Depends(get_db)):
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+        
+    from app.services.event_system import generate_events
+    return generate_events(mission_id, db)
+
+from app.schemas.decision import EnvironmentalDecisionResponse
+
+@router.get("/{mission_id}/decision", response_model=EnvironmentalDecisionResponse)
+def get_mission_decision(mission_id: str, db: Session = Depends(get_db)):
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+        
+    from app.services.environmental_decision import generate_environmental_decision
+    from app.core.config import settings
+    return generate_environmental_decision(mission_id, db, settings)
+
+

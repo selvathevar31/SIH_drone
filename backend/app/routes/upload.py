@@ -68,6 +68,7 @@ async def upload_csv(
                 latitude=r.latitude,
                 longitude=r.longitude,
                 altitude=r.altitude,
+                pm1=r.pm1,
                 pm25=r.pm25,
                 pm10=r.pm10,
                 temperature=r.temperature,
@@ -93,8 +94,11 @@ async def upload_csv(
     return {
         "success": True,
         "mission_id": actual_mission_id,
-        "rows_processed": result["rows_processed"],
-        "rows_rejected": result["rows_rejected"],
+        "total_rows": result["total_rows"],
+        "accepted_rows": result["accepted_rows"],
+        "rejected_rows": result["rejected_rows"],
+        "warnings": result["warnings"],
+        "errors": result["errors"],
         "hotspots_detected": len(hotspots)
     }
 

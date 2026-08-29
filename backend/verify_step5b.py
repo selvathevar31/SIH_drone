@@ -69,19 +69,19 @@ def run_tests():
         print("    -> SUCCESS: CSV pipeline imported Latitude, Longitude, Altitude, Timestamp flawlessly.\n")
 
         # Fetch Data Explorer to check parsing
-        res_exp = requests.get(f"{BASE_URL}/missions/M-TEST-A/data-explorer?limit=10")
-        data_exp = res_exp.json()["readings"]
+        res_exp = requests.get(f"{BASE_URL}/missions/M-TEST-A/readings?limit=10")
+        data_exp = res_exp.json()["items"]
         assert data_exp[0]["altitude"] == 100.5, "Altitude was not saved correctly"
         
         # TEST 2: AQI Calculation
         print("[2] Verifying Deterministic AQI Calculation...")
         # pm25=15, pm10=30 -> AQI ~ 25 (Good)
         assert data_exp[0]["pm25"] == 15
-        assert data_exp[0]["aqi_category"] == "GOOD"
+        assert data_exp[0]["aqi_category"] == "Good"
         
         # pm25=85, pm10=130 -> PM2.5 AQI ~ 181 (Poor), PM10 AQI ~ 120 (Moderate). Overall AQI should be 181.
         assert data_exp[1]["pm25"] == 85
-        assert data_exp[1]["aqi_category"] == "POOR"
+        assert data_exp[1]["aqi_category"] == "Poor"
         print("    -> SUCCESS: AQI accurately calculated against CPCB formula.\n")
 
         # TEST 4 & 5: Zone Generation & API Check

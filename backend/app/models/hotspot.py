@@ -12,7 +12,7 @@ class Hotspot(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     
-    radius_meters = Column(Float, nullable=False)
+    radius_meters = Column(Float, nullable=True, default=75.0)
     
     average_aqi = Column(Float, nullable=True)
     peak_aqi = Column(Integer, nullable=True)

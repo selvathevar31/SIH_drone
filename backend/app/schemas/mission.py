@@ -74,3 +74,10 @@ class MissionAnalytics(BaseModel):
     flight: FlightAnalytics
     environment: EnvironmentalAnalytics
     hotspots: HotspotAnalytics
+
+class MissionUpdate(BaseModel):
+    status: Optional[str] = None
+    end_time: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    distance_km: Optional[float] = None
+

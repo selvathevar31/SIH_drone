@@ -1,32 +1,58 @@
 import sys, os
 sys.path.insert(0, os.path.abspath('.'))
-from app.core.database import SessionLocal
+from fastapi.testclient import TestClient
+from app.main import app
+from app.core.database import Base, get_db
 from app.models.mission import Mission
 from app.models.reading import Reading
 from app.models.hotspot import Hotspot
-from sqlalchemy import func
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from datetime import datetime
 
-db = SessionLocal()
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-missions = db.query(Mission).order_by(Mission.created_at.desc()).limit(10).all()
-mission_ids = [m.mission_id for m in missions]
+Base.metadata.create_all(bind=engine)
+db = TestingSessionLocal()
 
-readings_stats = db.query(
-    Reading.mission_id,
-    func.avg(Reading.aqi).label('avg_aqi'),
-    func.max(Reading.aqi).label('max_aqi'),
-    func.avg(Reading.pm25).label('avg_pm25'),
-    func.max(Reading.pm25).label('max_pm25'),
-    func.avg(Reading.pm10).label('avg_pm10'),
-    func.max(Reading.pm10).label('max_pm10'),
-    func.avg(Reading.temperature).label('avg_temperature'),
-    func.avg(Reading.humidity).label('avg_humidity')
-).filter(Reading.mission_id.in_(mission_ids)).group_by(Reading.mission_id).all()
+# Setup data
+m1 = Mission(mission_id="M-1", duration_seconds=100, distance_km=2.5, total_readings=2)
+db.add(m1)
 
-hotspots_stats = db.query(
-    Hotspot.mission_id,
-    func.count(Hotspot.id).label('count')
-).filter(Hotspot.mission_id.in_(mission_ids)).group_by(Hotspot.mission_id).all()
+r1 = Reading(mission_id="M-1", timestamp=datetime.utcnow(), latitude=10.0, longitude=20.0, aqi=50, pm25=10.0, pm10=20.0, temperature=25.0, humidity=50.0, speed=5.0, altitude=100.0)
+r2 = Reading(mission_id="M-1", timestamp=datetime.utcnow(), latitude=10.1, longitude=20.1, aqi=150, pm25=50.0, pm10=60.0, temperature=30.0, humidity=60.0, speed=10.0, altitude=150.0)
+db.add_all([r1, r2])
 
-print(readings_stats)
-print(hotspots_stats)
+h1 = Hotspot(mission_id="M-1", latitude=10.1, longitude=20.1, average_aqi=100.0, peak_aqi=150, radius_meters=20.0, severity="High")
+db.add(h1)
+
+db.commit()
+
+# Print directly from session to verify it is there
+print(f"DB count missions: {db.query(Mission).count()}")
+print(f"DB count readings: {db.query(Reading).count()}")
+
+def override_get_db():
+    try:
+        db_session = TestingSessionLocal()
+        yield db_session
+    finally:
+        db_session.close()
+
+app.dependency_overrides[get_db] = override_get_db
+client = TestClient(app)
+
+response = client.get("/api/readings", params={"mission_id": "M-1"})
+print(f"READINGS STATUS: {response.status_code}")
+print(f"READINGS DATA: {response.json()}")
+
+response = client.get("/api/missions")
+print(f"MISSIONS STATUS: {response.status_code}")
+print(f"MISSIONS DATA: {response.json()}")
