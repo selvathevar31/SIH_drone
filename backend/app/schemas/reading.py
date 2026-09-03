@@ -31,6 +31,8 @@ class ReadingResponse(ReadingBase):
     data_source: str
     aqi: Optional[int]
     aqi_category: Optional[str]
+    pm25_aqi: Optional[int] = None
+    pm10_aqi: Optional[int] = None
     
     class Config:
         orm_mode = True

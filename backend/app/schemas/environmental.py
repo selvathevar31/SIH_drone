@@ -75,6 +75,8 @@ class MeasurementInfo(BaseModel):
 class DerivedInfo(BaseModel):
     aqi: Optional[int] = None
     aqi_category: Optional[str] = "UNKNOWN"
+    pm25_aqi: Optional[int] = None
+    pm10_aqi: Optional[int] = None
 
 class QualityMetadata(BaseModel):
     source: str = "UNKNOWN"
@@ -106,6 +108,8 @@ class EnvironmentalRecordResponse(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     aqi: Optional[int] = None
+    pm25_aqi: Optional[int] = None
+    pm10_aqi: Optional[int] = None
     aqi_category: Optional[str] = "UNKNOWN"
     
     class Config:

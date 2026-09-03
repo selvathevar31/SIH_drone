@@ -344,6 +344,17 @@ def _rule_based_fallback(ctx: GroundedContext) -> GroundedResponse:
         answer = "The simulated response indicates an improvement in spatial coverage and understanding. This is a simulation and not real sensor data."
         facts.append("Simulated metrics show improved sampling density.")
         recommendations.append("Execute the actual mission to verify these models.")
+    
+    elif intent == "INTENT_EXPLAIN_EVENT":
+        if evidence:
+            answer = "Based on the retrieved mission events and readings, the system detected significant pollution thresholds which triggered this decision."
+            facts.append("Recorded telemetry exceeded standard environmental thresholds.")
+            inferences.append("The AI analysis determined this event was critical for the mission.")
+            recommendations.append("Review the Replay Timeline or Event Evidence for exact timestamps.")
+        else:
+            answer = "Insufficient recorded evidence to determine this."
+            facts.append("No event telemetry was provided in the query context.")
+            inferences.append("Cannot reconstruct event without data.")
 
     elif intent == "mission_summary":
         if evidence:

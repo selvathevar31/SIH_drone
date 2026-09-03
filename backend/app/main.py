@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import os
 
 # Import routers
-from app.routes import missions, readings, hotspots, upload, dashboard, ai, public, response
+from app.routes import missions, readings, hotspots, upload, dashboard, ai, public, response, replay, hardware
 
 from app.models.simulation import ResponseSimulation
 
@@ -65,3 +65,5 @@ app.include_router(dashboard.router)
 app.include_router(ai.router)
 app.include_router(public.router)
 app.include_router(response.router)
+app.include_router(replay.router)
+app.include_router(hardware.router)

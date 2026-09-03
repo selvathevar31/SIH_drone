@@ -281,6 +281,36 @@ def export_mission_readings(
         media_type="text/csv", 
         headers={"Content-Disposition": f"attachment; filename=readings_{mission_id}.csv"}
     )
+
+@router.get("/{mission_id}/report")
+def get_mission_report(mission_id: str, db: Session = Depends(get_db)):
+    """Generate a comprehensive JSON mission report including replay events."""
+    mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+        
+    from app.services.mission_replay import get_replay_events
+    events = get_replay_events(mission_id, db)
+    
+    # Base analytics
+    from app.services.stats import calculate_mission_stats
+    readings = db.query(Reading).filter(Reading.mission_id == mission_id).order_by(Reading.timestamp).all()
+    stats = calculate_mission_stats(readings) if readings else {}
+    
+    return {
+        "mission_id": mission.mission_id,
+        "drone_id": mission.drone_id,
+        "status": mission.status,
+        "analytics": stats,
+        "replay_timeline": events,
+        "labels": {
+            "real_data": "OBSERVED DATA",
+            "inferences": "ANALYSIS",
+            "recommendations": "RECOMMENDATION",
+            "simulated_data": "SIMULATION"
+        }
+    }
+
 @router.get("/{mission_id}/analytics", response_model=MissionAnalytics)
 def get_mission_analytics(mission_id: str, db: Session = Depends(get_db)):
     mission = db.query(Mission).filter(Mission.mission_id == mission_id).first()

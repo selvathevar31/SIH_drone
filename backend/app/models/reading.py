@@ -36,3 +36,13 @@ class Reading(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mission = relationship("Mission", back_populates="readings")
+
+    @property
+    def pm25_aqi(self):
+        from app.services.aqi import calculate_aqi
+        return calculate_aqi(pm25=self.pm25, pm10=None).get("aqi") if self.pm25 is not None else None
+
+    @property
+    def pm10_aqi(self):
+        from app.services.aqi import calculate_aqi
+        return calculate_aqi(pm25=None, pm10=self.pm10).get("aqi") if self.pm10 is not None else None

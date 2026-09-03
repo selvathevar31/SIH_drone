@@ -77,7 +77,7 @@ def get_dashboard(
             )
         )
 
-    stats = calculate_mission_stats(all_readings)
+    stats = calculate_mission_stats(all_readings, hotspots)
     duration = stats["duration_seconds"] or mission.duration_seconds
     if not duration and mission.start_time and latest_reading:
         duration = int((latest_reading.timestamp - mission.start_time).total_seconds())
@@ -102,6 +102,30 @@ def get_dashboard(
             "average_ground_speed_mps": stats["average_ground_speed_mps"],
             "max_speed": stats["max_speed"],
             "max_altitude": stats["max_altitude"]
+        },
+        "mission_stats": {
+            "total_readings": stats["total_readings"],
+            "duration_seconds": duration,
+            "max_aqi": stats["max_aqi"],
+            "min_aqi": stats["min_aqi"],
+            "avg_aqi": stats["avg_aqi"],
+            "max_pm25": stats["max_pm25"],
+            "min_pm25": stats["min_pm25"],
+            "avg_pm25": stats["avg_pm25"],
+            "max_pm10": stats["max_pm10"],
+            "min_pm10": stats["min_pm10"],
+            "avg_pm10": stats["avg_pm10"],
+            "max_temperature": stats["max_temperature"],
+            "min_temperature": stats["min_temperature"],
+            "avg_temperature": stats["avg_temperature"],
+            "max_humidity": stats["max_humidity"],
+            "min_humidity": stats["min_humidity"],
+            "avg_humidity": stats["avg_humidity"],
+            "max_altitude": stats["max_altitude"],
+            "min_altitude": stats["min_altitude"],
+            "avg_altitude": stats["avg_altitude"],
+            "highest_pollution_location": stats["highest_pollution_location"],
+            "hotspot_count": stats["hotspot_count"]
         },
         "current_environment": {
             "aqi": latest_reading.aqi if latest_reading else None,
@@ -128,7 +152,6 @@ def get_dashboard(
         "hotspots": hotspots,
         "trend": trend,
         "recent_events": [
-            # Mocking recent events, this would normally query an Events table
             {"id": 1, "time": datetime.utcnow().strftime("%H:%M:%S"), "message": "Mission data fetched", "type": "info"}
         ]
     }

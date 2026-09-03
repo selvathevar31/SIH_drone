@@ -4,18 +4,21 @@ import Sidebar from './components/Sidebar';
 import MetricCards from './components/MetricCards';
 import MissionMap from './components/MissionMap';
 import MissionMap3D from './components/MissionMap3D';
-import HotspotPanel from './components/HotspotPanel';
-import PollutionTrendChart from './components/PollutionTrendChart';
-import FlightTelemetry from './components/FlightTelemetry';
+import MissionAlerts from './components/MissionAlerts';
+import MissionEvents from './components/MissionEvents';
 import MissionInformation from './components/MissionInformation';
 import RecentEvents from './components/RecentEvents';
 import DataExplorer from './components/DataExplorer';
 import FlightHistory from './components/FlightHistory';
 import HistoricalComparison from './components/HistoricalComparison';
-import EnvironmentalAnalyticsPanel from './components/EnvironmentalAnalyticsPanel';
-import ZonesPanel from './components/ZonesPanel';
-import Pollution3DMap from './components/Pollution3DMap';
+import PublicDashboard from './components/PublicDashboard';
+import SettingsPanel from './components/SettingsPanel';
+import MissionReplay from './components/MissionReplay';
 import { getMissions, getDashboard } from './services/api';
+import { Clock } from 'lucide-react';
+import PollutionTrendChart from './components/PollutionTrendChart';
+import PollutionAltitudeChart from './components/PollutionAltitudeChart';
+import AQIHeatmap from './components/AQIHeatmap';
 
 function App() {
   const [missions, setMissions] = useState([]);
@@ -30,34 +33,117 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [mapMode, setMapMode] = useState('2D'); // '2D' or '3D'
   
+  // Live State & Events System
+  const [liveState, setLiveState] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [intelSummary, setIntelSummary] = useState(null);
+  const [freshness, setFreshness] = useState('HISTORICAL');
+  
   const [currentView, setCurrentView] = useState('overview'); // 'overview' or 'explorer'
   const [mapLocateTarget, setMapLocateTarget] = useState(null);
+  
+  // Time filter state
+  const [timeFilter, setTimeFilter] = useState('ALL'); // 'ALL', '30M', '15M', '5M'
 
   const abortControllerRef = useRef(null);
   const isFetchingRef = useRef(false);
 
   const pollInterval = parseInt(import.meta.env.VITE_POLL_INTERVAL || '2000', 10);
 
-  // Initial load of missions
+  // Poll missions list to detect active simulated missions & update list
   useEffect(() => {
-    const fetchInitialMissions = async () => {
+    const pollMissions = async () => {
       try {
         const data = await getMissions();
         setMissions(data);
         setBackendOnline(true);
-        if (data.length > 0) {
+        
+        // 1. Initial selection if none exists
+        if (data.length > 0 && !selectedMission) {
           setSelectedMission(data[0].mission_id);
-        } else {
+        }
+        
+        // 2. Auto-switch to active in-progress simulation if detected
+        const activeSim = data.find(m => 
+          m.status && 
+          ['TAKEOFF', 'SURVEYING', 'HOTSPOT_DETECTED', 'RETURNING', 'LANDING'].includes(m.status)
+        );
+        
+        if (activeSim && selectedMission !== activeSim.mission_id) {
+          setSelectedMission(activeSim.mission_id);
+          setIsLive(true);
+          console.log(`[FLUXX] Auto-switched to active simulation: ${activeSim.mission_id}`);
+        }
+        
+        if (data.length === 0) {
           setIsLoading(false);
         }
       } catch (err) {
         setBackendOnline(false);
-        setError("BACKEND CONNECTION LOST. Unable to retrieve missions.");
-        setIsLoading(false);
+        // Only show fatal error on initial load when there is no dashboard data yet
+        if (!dashboardData) {
+          setError("BACKEND CONNECTION LOST. Unable to retrieve missions.");
+          setIsLoading(false);
+        }
       }
     };
-    fetchInitialMissions();
-  }, []);
+    
+    pollMissions();
+    const interval = setInterval(pollMissions, 4000);
+    return () => clearInterval(interval);
+  }, [selectedMission, dashboardData]);
+
+  const getTimeParams = (latestTimestamp) => {
+    if (timeFilter === 'ALL' || !latestTimestamp) return {};
+    
+    // Parse latest timestamp and subtract minutes
+    const endDt = new Date(latestTimestamp);
+    let minutesToSubtract = 0;
+    if (timeFilter === '30M') minutesToSubtract = 30;
+    if (timeFilter === '15M') minutesToSubtract = 15;
+    if (timeFilter === '5M') minutesToSubtract = 5;
+    
+    const startDt = new Date(endDt.getTime() - minutesToSubtract * 60000);
+    return {
+      start_time: startDt.toISOString(),
+      end_time: endDt.toISOString()
+    };
+  };
+
+  const fetchLiveStateData = async (missionId) => {
+    try {
+      const [liveStateRes, eventsRes, intelRes] = await Promise.all([
+        fetch(`http://localhost:8000/api/missions/${missionId}/live-state`).then(r => r.json()),
+        fetch(`http://localhost:8000/api/missions/${missionId}/events`).then(r => r.json()),
+        fetch(`http://localhost:8000/api/missions/${missionId}/intelligence`).then(r => r.json())
+      ]);
+      
+      setLiveState(liveStateRes);
+      setEvents(eventsRes);
+      setIntelSummary(intelRes);
+      
+      if (isLive) {
+        if (liveStateRes.latest_timestamp) {
+          const lastTime = new Date(liveStateRes.latest_timestamp);
+          const diff = Math.floor((new Date() - lastTime) / 1000);
+          if (diff <= 10) {
+            setFreshness("LIVE");
+          } else {
+            setFreshness(`STALE (Last update ${diff}s ago)`);
+          }
+        } else {
+          setFreshness("STALE (No readings)");
+        }
+      } else {
+        setFreshness("HISTORICAL");
+      }
+      setBackendOnline(true);
+    } catch (err) {
+      console.error("Live state fetch error:", err);
+      setFreshness("OFFLINE");
+      setBackendOnline(false);
+    }
+  };
 
   // Fetch dashboard data whenever mission changes or poll triggers
   const fetchDashboard = async (missionId, isBackgroundPoll = false) => {
@@ -66,15 +152,28 @@ function App() {
     isFetchingRef.current = true;
     if (!isBackgroundPoll) setIsLoading(true);
     
-    // Abort stale requests
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
 
     try {
-      const data = await getDashboard(missionId, abortControllerRef.current.signal);
-      setDashboardData(data);
+      // First, get base dashboard without time filter to find latest timestamp
+      const baseData = await getDashboard(missionId, {}, abortControllerRef.current.signal);
+      
+      let finalData = baseData;
+      const latestTimestamp = baseData.mission.end_time || (baseData.trend && baseData.trend.length > 0 ? baseData.trend[baseData.trend.length-1].timestamp : null);
+      
+      const timeParams = getTimeParams(latestTimestamp);
+      
+      // If filtering is applied, refetch with filters
+      if (timeFilter !== 'ALL' && Object.keys(timeParams).length > 0) {
+          finalData = await getDashboard(missionId, timeParams, abortControllerRef.current.signal);
+          // Preserve mission stats from baseData since filtering removes historical context
+          finalData.mission = baseData.mission; 
+      }
+
+      setDashboardData(finalData);
       setLastUpdated(new Date().toLocaleTimeString());
       setBackendOnline(true);
       setError(null);
@@ -93,25 +192,26 @@ function App() {
     }
   };
 
-  // Change mission handler
   useEffect(() => {
     if (selectedMission) {
       fetchDashboard(selectedMission);
+      fetchLiveStateData(selectedMission);
     }
-  }, [selectedMission]);
+  }, [selectedMission, timeFilter]);
 
   // Polling logic for Live mode
   useEffect(() => {
     let interval;
     if (isLive && selectedMission) {
+      fetchLiveStateData(selectedMission);
       interval = setInterval(() => {
         fetchDashboard(selectedMission, true);
+        fetchLiveStateData(selectedMission);
       }, pollInterval);
     }
     return () => clearInterval(interval);
-  }, [isLive, selectedMission]);
+  }, [isLive, selectedMission, timeFilter]);
 
-  // Handler for mission upload success
   const handleMissionUploaded = (newMissionId) => {
     getMissions().then(data => {
       setMissions(data);
@@ -125,16 +225,22 @@ function App() {
     setMapLocateTarget([reading.latitude, reading.longitude]);
   };
 
+  // Derive timeParams for child components
+  const latestTimestamp = dashboardData?.mission?.end_time;
+  const childTimeParams = getTimeParams(latestTimestamp);
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
       <Header 
         missions={missions} 
         selectedMission={selectedMission} 
         setSelectedMission={setSelectedMission}
-        isLive={isLive}
+        isLive={currentView === 'replay' ? false : isLive}
         setIsLive={setIsLive}
         backendOnline={backendOnline}
         lastUpdated={lastUpdated}
+        liveData={liveState}
+        freshness={currentView === 'replay' ? 'REPLAY' : freshness}
       />
       
       <div className="flex flex-1 overflow-hidden">
@@ -193,83 +299,76 @@ function App() {
             <HistoricalComparison missions={missions} />
           )}
 
+          {currentView === 'public' && (
+            <PublicDashboard />
+          )}
+
+          {currentView === 'replay' && selectedMission && dashboardData && (
+            <MissionReplay 
+              missionId={selectedMission} 
+              dashboardData={dashboardData}
+              onExit={() => setCurrentView('overview')}
+            />
+          )}
+
+          {currentView === 'settings' && (
+            <SettingsPanel />
+          )}
+
           {dashboardData && !isLoading && !error && currentView === 'overview' && (
             <div className="max-w-[1920px] mx-auto flex flex-col gap-4 lg:gap-6">
               
-              <MetricCards data={dashboardData.current_environment} />
-
-              <EnvironmentalAnalyticsPanel missionId={dashboardData.mission.mission_id} />
-              
-              <ZonesPanel missionId={dashboardData.mission.mission_id} />
-              
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6">
-                <div className="lg:col-span-3 flex flex-col gap-2">
-                  {/* Map Mode Toggle */}
-                  <div className="flex bg-surface-elevated rounded border border-border p-1 w-72 self-end">
-                    <button 
-                      onClick={() => setMapMode('2D')}
-                      className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 rounded transition-colors ${mapMode === '2D' ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'}`}
-                    >
-                      2D Map
-                    </button>
-                    <button 
-                      onClick={() => setMapMode('3D')}
-                      className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 rounded transition-colors ${mapMode === '3D' ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'}`}
-                    >
-                      3D Drone
-                    </button>
-                    <button 
-                      onClick={() => setMapMode('3D Profile')}
-                      className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 rounded transition-colors ${mapMode === '3D Profile' ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'}`}
-                    >
-                      3D Profile
-                    </button>
-                  </div>
-
-                  {mapMode === '2D' ? (
-                    <MissionMap 
-                      missionId={dashboardData.mission.mission_id}
-                      flightPath={dashboardData.flight_path} 
-                      currentLocation={dashboardData.current_location} 
-                      hotspots={dashboardData.hotspots}
-                      telemetry={dashboardData.current_environment}
-                      mapLocateTarget={mapLocateTarget}
-                    />
-                  ) : mapMode === '3D Profile' ? (
-                    <Pollution3DMap missionId={dashboardData.mission.mission_id} />
-                  ) : (
-                    <MissionMap3D 
-                      flightPath={dashboardData.flight_path} 
-                      currentLocation={dashboardData.current_location} 
-                      hotspots={dashboardData.hotspots}
-                      telemetry={dashboardData.current_environment}
-                    />
-                  )}
+              {/* Time Filter Bar */}
+              <div className="flex justify-between items-center bg-surface-elevated p-2 rounded border border-border">
+                <div className="flex items-center gap-2 text-text-muted text-xs font-mono font-bold uppercase">
+                  <Clock className="w-4 h-4" /> Global Time Filter
                 </div>
-                <div className="lg:col-span-1">
-                  <HotspotPanel hotspots={dashboardData.hotspots} />
+                <div className="flex gap-1">
+                  {['ALL', '30M', '15M', '5M'].map(tf => (
+                    <button
+                      key={tf}
+                      onClick={() => setTimeFilter(tf)}
+                      className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded transition-colors ${timeFilter === tf ? 'bg-telemetry text-background shadow' : 'bg-surface-secondary text-text-muted hover:text-text-primary border border-border'}`}
+                    >
+                      {tf === 'ALL' ? 'Full Mission' : `Last ${tf.replace('M', ' Min')}`}
+                    </button>
+                  ))}
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
-                <div className="lg:col-span-2 min-h-[300px]">
-                  <PollutionTrendChart trend={dashboardData.trend} mission={dashboardData.mission} />
-                </div>
-                <div className="lg:col-span-1">
-                  <div className="flex flex-col gap-4 lg:gap-6 h-full">
-                    <div className="flex-1 min-h-[200px]">
-                      <FlightTelemetry telemetry={dashboardData.telemetry} />
-                    </div>
-                    <div className="flex-1 min-h-[220px]">
-                      <MissionInformation mission={dashboardData.mission} />
-                    </div>
-                  </div>
-                </div>
-                <div className="lg:col-span-1 min-h-[300px]">
-                  <RecentEvents events={dashboardData.recent_events} />
-                </div>
+
+              {/* Demo Control Center removed as per SIH guidelines */}
+
+              {/* ROW 1: MetricCards */}
+              <MetricCards stats={dashboardData.mission_stats} />
+
+              {/* ROW 2: The Two Charts side-by-side */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[350px]">
+                <PollutionTrendChart trend={dashboardData.trend} mission={dashboardData.mission} />
+                <PollutionAltitudeChart missionId={dashboardData.mission.mission_id} timeParams={childTimeParams} />
               </div>
-              
+
+              {/* ROW 3: The Maps side-by-side */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[500px]">
+                <MissionMap 
+                  missionId={dashboardData.mission.mission_id}
+                  flightPath={dashboardData.flight_path} 
+                  currentLocation={dashboardData.current_location} 
+                  hotspots={dashboardData.hotspots}
+                  telemetry={dashboardData.current_environment}
+                  mapLocateTarget={mapLocateTarget}
+                />
+                <MissionMap3D 
+                  missionId={dashboardData.mission.mission_id}
+                  flightPath={dashboardData.flight_path} 
+                  currentLocation={dashboardData.current_location} 
+                  hotspots={dashboardData.hotspots}
+                  telemetry={dashboardData.current_environment}
+                />
+              </div>
+
+              {/* ROW 4: AQI Thermal Heatmap — full width below 3D map */}
+              <AQIHeatmap missionId={dashboardData.mission.mission_id} />
+
             </div>
           )}
         </main>

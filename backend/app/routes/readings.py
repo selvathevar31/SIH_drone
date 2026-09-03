@@ -61,7 +61,9 @@ def to_canonical_response(r: Reading) -> Dict[str, Any]:
         },
         "derived": {
             "aqi": r.aqi,
-            "aqi_category": r.aqi_category or "UNKNOWN"
+            "aqi_category": r.aqi_category or "UNKNOWN",
+            "pm25_aqi": r.pm25_aqi,
+            "pm10_aqi": r.pm10_aqi
         },
         "metadata": {
             "source": r.data_source or "UNKNOWN",
@@ -85,6 +87,8 @@ def to_canonical_response(r: Reading) -> Dict[str, Any]:
         "temperature": r.temperature,
         "humidity": r.humidity,
         "aqi": r.aqi,
+        "pm25_aqi": r.pm25_aqi,
+        "pm10_aqi": r.pm10_aqi,
         "aqi_category": r.aqi_category or "UNKNOWN"
     }
 

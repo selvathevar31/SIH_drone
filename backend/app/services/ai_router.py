@@ -147,11 +147,13 @@ def detect_intent_and_extract_params(question: str) -> Tuple[str, Dict[str, Any]
     if any(k in q for k in ["summary", "summarize", "what happened", "overview"]):
         return INTENT_MISSION_SUMMARY, params
 
-    # 10.5 Recommendation / Simulation
+    # 10.5 Recommendation / Simulation / Replay Explain
     if any(k in q for k in ["recommend", "next step", "where should", "sample next", "decision"]):
         return INTENT_RECOMMENDATION, params
     if any(k in q for k in ["simulate", "simulation", "projected", "response plan"]):
         return INTENT_SIMULATION, params
+    if any(k in q for k in ["what happened", "why was", "why did", "what evidence", "important event", "replay"]):
+        return "INTENT_EXPLAIN_EVENT", params
 
     # 11. Location-specific
     if any(k in q for k in ["where", "location", "area"]):

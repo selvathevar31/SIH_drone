@@ -28,7 +28,11 @@ def process_csv_upload(file_content: bytes, mission_id: str, data_source: str = 
         'lat': 'latitude',
         'lon': 'longitude',
         'temp': 'temperature',
-        'humid': 'humidity'
+        'humid': 'humidity',
+        'pm2.5': 'pm25',
+        'pm 2.5': 'pm25',
+        'pm 10': 'pm10',
+        'pm1.0': 'pm1'
     }
     
     # Rename matching columns
@@ -41,6 +45,9 @@ def process_csv_upload(file_content: bytes, mission_id: str, data_source: str = 
             columns_to_rename[col] = clean_col # force lowercase normalized
             
     df = df.rename(columns=columns_to_rename)
+    
+    # Debug output for development
+    print(f"Detected columns: {', '.join(df.columns.tolist())}")
     
     # Required core checks
     required_cols = ['timestamp', 'latitude', 'longitude', 'altitude', 'pm25', 'pm10', 'temperature', 'humidity']

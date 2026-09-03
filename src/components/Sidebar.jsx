@@ -1,16 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Map, MapPin, Activity, History, Settings, UploadCloud, X, FileText, Database, GitCompare } from 'lucide-react';
+import { LayoutDashboard, Map, MapPin, Activity, History, Settings, UploadCloud, X, FileText, Database, GitCompare, Globe, PlayCircle } from 'lucide-react';
 import { uploadCSV, loadDemoCSV } from '../services/api';
 
-const navItems = [
-  { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
-  { id: 'explorer', icon: Database, label: 'Data Explorer' },
-  { icon: Activity, label: 'Live Mission' },
-  { icon: Map, label: 'Pollution Map' },
-  { icon: MapPin, label: 'Hotspots' },
-  { id: 'history', icon: History, label: 'Flight History' },
-  { id: 'comparison', icon: GitCompare, label: 'Comparison' },
-  { icon: Settings, label: 'Settings' }
+const navGroups = [
+  {
+    title: 'MISSION',
+    items: [
+      { id: 'overview', icon: LayoutDashboard, label: 'Overview' },
+      { id: 'explorer', icon: Database, label: 'Data Explorer' }
+    ]
+  },
+  {
+    title: 'ANALYTICS',
+    items: [
+      { id: 'history', icon: History, label: 'Flight History' },
+      { id: 'comparison', icon: GitCompare, label: 'Comparison' }
+    ]
+  },
+  {
+    title: 'INTELLIGENCE',
+    items: [
+      { id: 'replay', icon: PlayCircle, label: 'Mission Replay' }
+    ]
+  },
+  {
+    title: 'ACCESS',
+    items: [
+      { id: 'public', icon: Globe, label: 'Public Portal' },
+      { id: 'settings', icon: Settings, label: 'Settings' }
+    ]
+  }
 ];
 
 export default function Sidebar({ onUploadSuccess, currentView = 'overview', setCurrentView }) {
@@ -94,30 +113,39 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
   return (
     <>
       <aside className="w-16 lg:w-56 border-r border-border bg-surface-primary flex flex-col shrink-0 transition-all duration-300">
-        <nav className="flex-1 py-6 px-3 flex flex-col gap-2">
-          {navItems.map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <a
-                key={i}
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (item.id && setCurrentView) {
-                    setCurrentView(item.id);
-                  }
-                }}
-                className={`flex items-center gap-3 px-3 py-3 rounded-md transition-colors ${
-                  item.id === currentView 
-                    ? 'bg-surface-elevated text-telemetry border border-border/50 shadow-sm' 
-                    : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                <span className="hidden lg:block text-sm font-medium">{item.label}</span>
-              </a>
-            );
-          })}
+        <nav className="flex-1 py-6 px-3 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+          {navGroups.map((group, groupIdx) => (
+            <div key={groupIdx} className="flex flex-col gap-2">
+              <span className="hidden lg:block px-3 text-[10px] font-mono font-bold tracking-widest uppercase text-text-muted">
+                {group.title}
+              </span>
+              <div className="flex flex-col gap-1">
+                {group.items.map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <a
+                      key={i}
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (item.id && setCurrentView) {
+                          setCurrentView(item.id);
+                        }
+                      }}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                        item.id === currentView 
+                          ? 'bg-surface-elevated text-telemetry border border-border/50 shadow-sm' 
+                          : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="hidden lg:block text-xs font-bold uppercase tracking-wider">{item.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
         
         <div className="p-3 mb-4">

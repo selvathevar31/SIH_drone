@@ -295,11 +295,11 @@ export default function DataExplorer({ missionId, onLocateOnMap }) {
                             <th className="p-3 border-b border-border font-bold tracking-wider uppercase">Timestamp</th>
                             <th className="p-3 border-b border-border font-bold tracking-wider uppercase">Lat, Lng</th>
                             <th className="p-3 border-b border-border font-bold tracking-wider uppercase">Alt (m)</th>
-                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase">AQI</th>
                             <th className="p-3 border-b border-border font-bold tracking-wider uppercase">PM2.5</th>
+                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase text-telemetry">PM2.5 AQI</th>
                             <th className="p-3 border-b border-border font-bold tracking-wider uppercase">PM10</th>
-                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase">Temp (°C)</th>
-                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase">Hum (%)</th>
+                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase text-telemetry">PM10 AQI</th>
+                            <th className="p-3 border-b border-border font-bold tracking-wider uppercase text-hazardous">Final AQI</th>
                         </tr>
                     </thead>
                     <tbody className="font-mono">
@@ -312,11 +312,11 @@ export default function DataExplorer({ missionId, onLocateOnMap }) {
                                 <td className="p-3 text-text-primary">{new Date(r.timestamp).toLocaleString()}</td>
                                 <td className="p-3 text-text-secondary">{r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}</td>
                                 <td className="p-3 text-text-secondary">{r.altitude?.toFixed(1) ?? '-'}</td>
-                                <td className="p-3 font-bold" style={{color: getSeverityColor(r.aqi_category)}}>{r.aqi ?? '-'}</td>
                                 <td className="p-3 text-text-secondary">{r.pm25?.toFixed(1) ?? '-'}</td>
+                                <td className="p-3 text-telemetry font-bold">{r.pm25_aqi ?? '-'}</td>
                                 <td className="p-3 text-text-secondary">{r.pm10?.toFixed(1) ?? '-'}</td>
-                                <td className="p-3 text-text-secondary">{r.temperature?.toFixed(1) ?? '-'}</td>
-                                <td className="p-3 text-text-secondary">{r.humidity?.toFixed(0) ?? '-'}</td>
+                                <td className="p-3 text-telemetry font-bold">{r.pm10_aqi ?? '-'}</td>
+                                <td className="p-3 font-bold" style={{color: getSeverityColor(r.aqi_category)}}>{r.aqi ?? '-'}</td>
                             </tr>
                         ))}
                         

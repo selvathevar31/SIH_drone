@@ -50,57 +50,21 @@ const persistentIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
-// Component to handle dynamic map recentering
-function MapUpdater({ centerPosition, envPoints, followDrone, shouldRecenter, setShouldRecenter }) {
-  const map = useMap();
-  const previousCenter = useRef(null);
+const recommendedIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
-  useEffect(() => {
-    if (centerPosition && centerPosition.length === 2) {
-      
-      // Manual recenter trigger
-      if (shouldRecenter) {
-        map.setView(centerPosition, 16);
-        setShouldRecenter(false);
-        previousCenter.current = centerPosition;
-        return;
-      }
-      
-      // If we don't have a previous center, fit bounds or set view
-      if (!previousCenter.current) {
-        if (envPoints && envPoints.length > 0) {
-          const bounds = L.latLngBounds(envPoints.map(p => [p.latitude, p.longitude]));
-          map.fitBounds(bounds, { padding: [50, 50] });
-        } else {
-          map.setView(centerPosition, 16);
-        }
-      } else {
-        // If follow drone is active, pan smoothly
-        if (followDrone) {
-          map.panTo(centerPosition, { animate: true, duration: 1.0 });
-        } else {
-          // If massively far (mission switch)
-          const dist = map.distance(previousCenter.current, centerPosition);
-          if (dist > 5000) {
-             if (envPoints && envPoints.length > 0) {
-              const bounds = L.latLngBounds(envPoints.map(p => [p.latitude, p.longitude]));
-              map.fitBounds(bounds, { padding: [50, 50] });
-            } else {
-              map.setView(centerPosition, 16);
-            }
-          }
-        }
-      }
-      previousCenter.current = centerPosition;
-    }
-  }, [centerPosition, map, envPoints, followDrone, shouldRecenter]);
+// Component completely removed in favor of strict mapRef effects
+export default function MissionMap({ missionId, flightPath, currentLocation, hotspots, telemetry, mapLocateTarget, simulation }) {
+  const mapRef = useRef(null);
+  const initializedRef = useRef(false);
 
-  return null;
-}
-
-export default function MissionMap({ missionId, flightPath, currentLocation, hotspots, telemetry, mapLocateTarget }) {
   const [followDrone, setFollowDrone] = useState(false);
-  const [shouldRecenter, setShouldRecenter] = useState(false);
   const [operatorLoc, setOperatorLoc] = useState(null);
   const [envData, setEnvData] = useState([]);
   
@@ -112,10 +76,13 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
     hotspots: true,
     zones: false,
     persistent: false,
+    recommended: true,
+    simulation: true,
   });
   
   const [zonesData, setZonesData] = useState([]);
   const [persistentData, setPersistentData] = useState([]);
+  const [recommendationsData, setRecommendationsData] = useState([]);
   
   // Metric controls (aqi, pm25, pm10)
   const [heatmapMetric, setHeatmapMetric] = useState('aqi');
@@ -133,26 +100,65 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
       getPersistentHotspots().then(data => {
         if(data && data.persistent_hotspots) setPersistentData(data.persistent_hotspots);
       }).catch(console.error);
+
+      fetch(`http://localhost:8000/api/missions/${missionId}/decision`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.recommendations) {
+            setRecommendationsData(data.recommendations);
+          }
+        }).catch(console.error);
     }
   }, [missionId]);
 
   // Determine actual center to use based on strict backend data ONLY
-  let activeCenter = null;
-  if (mapLocateTarget) {
-    activeCenter = mapLocateTarget;
-  } else if (currentLocation && typeof currentLocation.latitude === 'number' && typeof currentLocation.longitude === 'number') {
-    activeCenter = [currentLocation.latitude, currentLocation.longitude];
-  } else if (envData && envData.length > 0) {
-    const lastPoint = envData[envData.length - 1];
-    activeCenter = [lastPoint.latitude, lastPoint.longitude];
-  } else if (flightPath && flightPath.length > 0) {
-    const lastPoint = flightPath[flightPath.length - 1];
-    if (typeof lastPoint.latitude === 'number' && typeof lastPoint.longitude === 'number') {
-      activeCenter = [lastPoint.latitude, lastPoint.longitude];
+  const activeCenter = useMemo(() => {
+    if (mapLocateTarget) {
+      return mapLocateTarget;
+    } else if (currentLocation && typeof currentLocation.latitude === 'number' && typeof currentLocation.longitude === 'number') {
+      return [currentLocation.latitude, currentLocation.longitude];
+    } else if (envData && envData.length > 0) {
+      const lastPoint = envData[envData.length - 1];
+      return [lastPoint.latitude, lastPoint.longitude];
+    } else if (flightPath && flightPath.length > 0) {
+      const lastPoint = flightPath[flightPath.length - 1];
+      if (typeof lastPoint.latitude === 'number' && typeof lastPoint.longitude === 'number') {
+        return [lastPoint.latitude, lastPoint.longitude];
+      }
     }
-  }
+    return null;
+  }, [mapLocateTarget, currentLocation, envData, flightPath]);
   
   const hasGpsData = activeCenter !== null;
+
+  // A. MAP INITIALIZATION: Only runs once when we have our first GPS position
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !activeCenter || initializedRef.current) return;
+
+    if (envData && envData.length > 0) {
+      const bounds = L.latLngBounds(envData.map(p => [p.latitude, p.longitude]));
+      map.fitBounds(bounds, { padding: [50, 50] });
+    } else {
+      map.setView(activeCenter, 16);
+    }
+    initializedRef.current = true;
+  }, [activeCenter, envData]);
+
+  // B. USER RECENTER (Locate Target)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLocateTarget || !initializedRef.current) return;
+    map.setView(mapLocateTarget, 16);
+    setFollowDrone(false);
+  }, [mapLocateTarget]);
+
+  // C. FOLLOW DRONE (Continuous pan if active)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !followDrone || !activeCenter || !initializedRef.current) return;
+    map.panTo(activeCenter, { animate: true, duration: 1.0 });
+  }, [activeCenter, followDrone]);
 
   const handleOperatorLocation = () => {
     if ('geolocation' in navigator) {
@@ -231,6 +237,14 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
                 <input type="checkbox" checked={layers.persistent} onChange={() => toggleLayer('persistent')} className="accent-telemetry" />
                 Persistent
             </label>
+            <label className="flex items-center gap-2 text-text-secondary hover:text-text-primary cursor-pointer text-telemetry">
+                <input type="checkbox" checked={layers.recommended} onChange={() => toggleLayer('recommended')} className="accent-telemetry" />
+                Recommended Sampling
+            </label>
+            <label className="flex items-center gap-2 text-text-secondary hover:text-text-primary cursor-pointer text-fuchsia-400">
+                <input type="checkbox" checked={layers.simulation} onChange={() => toggleLayer('simulation')} className="accent-fuchsia-400" />
+                Simulated Readings
+            </label>
         </div>
         
         <h2 className="text-[10px] font-bold tracking-widest text-text-muted uppercase mb-2">Pollution Metric</h2>
@@ -251,16 +265,23 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
       </div>
 
       {/* Map Legend */}
-      {layers.measurements && (
-        <div className="absolute bottom-6 left-4 z-[400] bg-surface-elevated/90 backdrop-blur-md border border-border p-3 rounded shadow-lg text-xs font-mono">
-            <h2 className="text-[10px] font-bold tracking-widest text-text-muted uppercase mb-2 border-b border-border/50 pb-1">AQI Legend</h2>
-            <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#22C55E'}}>GOOD</span> <span className="text-text-muted">0-50</span></div>
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#84CC16'}}>SATISFACTORY</span> <span className="text-text-muted">51-100</span></div>
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#EAB308'}}>MODERATE</span> <span className="text-text-muted">101-200</span></div>
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#F97316'}}>POOR</span> <span className="text-text-muted">201-300</span></div>
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#EF4444'}}>VERY POOR</span> <span className="text-text-muted">301-400</span></div>
-                <div className="flex items-center justify-between gap-4"><span style={{color: '#7F1D1D'}}>SEVERE</span> <span className="text-text-muted">401+</span></div>
+      {(layers.measurements || layers.heatmap || layers.hotspots) && (
+        <div className="absolute bottom-6 left-4 z-[400] bg-surface-elevated/90 backdrop-blur-md border border-border p-2 rounded shadow-lg text-[10px] font-mono flex flex-col gap-1 w-64">
+            <h2 className="font-bold tracking-widest text-text-muted uppercase border-b border-border/50 pb-1 flex justify-between">
+                <span>{heatmapMetric.toUpperCase()} Level</span>
+            </h2>
+            <div className="flex h-2 w-full rounded overflow-hidden mt-1">
+                <div style={{backgroundColor: '#22C55E', flex: 1}}></div>
+                <div style={{backgroundColor: '#84CC16', flex: 1}}></div>
+                <div style={{backgroundColor: '#EAB308', flex: 1}}></div>
+                <div style={{backgroundColor: '#F97316', flex: 1}}></div>
+                <div style={{backgroundColor: '#EF4444', flex: 1}}></div>
+                <div style={{backgroundColor: '#7F1D1D', flex: 1}}></div>
+            </div>
+            <div className="flex justify-between text-text-muted mt-0.5 px-0.5">
+                <span>Low</span>
+                <span>Mod</span>
+                <span>Sev</span>
             </div>
         </div>
       )}
@@ -280,7 +301,12 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
         </button>
         
         <button 
-          onClick={() => setShouldRecenter(true)}
+          onClick={() => {
+            if (mapRef.current && activeCenter) {
+              mapRef.current.setView(activeCenter, 16);
+            }
+            setFollowDrone(false);
+          }}
           className="flex items-center justify-between w-36 px-3 py-2 rounded shadow-lg border border-border bg-surface-elevated/90 text-text-muted hover:text-text-primary backdrop-blur-sm text-xs font-bold uppercase tracking-wide transition-colors"
         >
           Recenter
@@ -305,6 +331,7 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
         </div>
       ) : (
         <MapContainer 
+          ref={mapRef}
           center={activeCenter} 
           zoom={16} 
           scrollWheelZoom={true} 
@@ -315,14 +342,6 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          
-          <MapUpdater 
-            centerPosition={activeCenter} 
-            envPoints={envData} 
-            followDrone={followDrone} 
-            shouldRecenter={shouldRecenter || mapLocateTarget !== null} 
-            setShouldRecenter={setShouldRecenter} 
           />
 
           {layers.route && flightPath && flightPath.length > 0 && (
@@ -390,6 +409,50 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
                         <div className="flex justify-between py-1">
                             <span className="text-text-muted">Coordinates</span>
                             <span className="text-text-primary text-[10px]">{pt.latitude.toFixed(6)}, {pt.longitude.toFixed(6)}</span>
+                        </div>
+                    </div>
+                 </Popup>
+             </CircleMarker>
+          ))}
+
+          {layers.simulation && simulation && simulation.simulated_readings && simulation.simulated_readings.map((pt, i) => (
+             <CircleMarker 
+                key={`sim-${i}`}
+                center={[pt.latitude, pt.longitude]}
+                radius={3}
+                pathOptions={{
+                    color: '#d946ef', // fuchsia-500
+                    fillColor: '#d946ef',
+                    fillOpacity: 0.5,
+                    weight: 1,
+                    dashArray: '2, 2'
+                }}
+             >
+                 <Popup className="custom-popup min-w-[200px]">
+                    <div className="font-mono text-xs">
+                        <strong className="text-fuchsia-500 block mb-1 uppercase text-sm border-b border-border pb-1">SIMULATED READING</strong>
+                        <div className="flex justify-between py-1 border-b border-border/30">
+                            <span className="text-text-muted">Source</span>
+                            <span className="text-fuchsia-400 font-bold">SIMULATION</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-border/30">
+                            <span className="text-text-muted">AQI</span>
+                            <span className="font-bold text-fuchsia-400">{pt.aqi ?? 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-border/30">
+                            <span className="text-text-muted">PM2.5</span>
+                            <span className="text-text-primary">{pt.pm25 != null ? `${pt.pm25.toFixed(1)} µg/m³` : 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-border/30">
+                            <span className="text-text-muted">Altitude</span>
+                            <span className="text-text-primary">{pt.altitude != null ? `${pt.altitude.toFixed(1)} m` : 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                            <span className="text-text-muted">Coordinates</span>
+                            <span className="text-text-primary text-[10px]">{pt.latitude.toFixed(6)}, {pt.longitude.toFixed(6)}</span>
+                        </div>
+                        <div className="text-[9px] text-fuchsia-400/70 mt-2 italic border-t border-border/20 pt-1 text-center">
+                            *Not real sensor data*
                         </div>
                     </div>
                  </Popup>
@@ -576,6 +639,40 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
                         <span className="text-text-primary">{Math.round(ph.altitude.min_meters)}-{Math.round(ph.altitude.max_meters)}m</span>
                       </div>
                     )}
+                  </div>
+                </Popup>
+              </Marker>
+            </React.Fragment>
+          ))}
+
+          {layers.recommended && recommendationsData.map((rec, idx) => (
+            <React.Fragment key={`rec-zone-${idx}`}>
+              <Circle 
+                center={[rec.location.latitude, rec.location.longitude]} 
+                pathOptions={{ 
+                  color: '#3B82F6', 
+                  fillColor: '#3B82F6', 
+                  fillOpacity: 0.15, 
+                  weight: 2,
+                  dashArray: '5, 10'
+                }} 
+                radius={rec.radius_meters || 75} 
+              />
+              <Marker position={[rec.location.latitude, rec.location.longitude]} icon={recommendedIcon}>
+                <Popup className="custom-popup">
+                  <div className="font-mono text-xs">
+                    <strong className="text-telemetry block mb-1 uppercase text-sm border-b border-border pb-1">RECOMMENDED ACTION: {rec.action}</strong>
+                    <div className="flex justify-between py-1 border-b border-border/30">
+                      <span className="text-text-muted">Priority</span>
+                      <span className="font-bold text-telemetry uppercase">{rec.priority}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/30">
+                      <span className="text-text-muted">Reason</span>
+                      <span className="text-text-primary text-[10px] break-words max-w-[150px]">{rec.reason}</span>
+                    </div>
+                    <div className="text-[9px] text-warning mt-2 italic border-t border-border/20 pt-1 font-bold">
+                      STATUS: RECOMMENDATION ONLY
+                    </div>
                   </div>
                 </Popup>
               </Marker>

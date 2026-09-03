@@ -26,6 +26,8 @@ def calculate_sub_index(c: float, breakpoints: list) -> Optional[int]:
     if c is None or math.isnan(c) or c < 0:
         return None
         
+    c = round(c)
+
     for (c_low, c_high, i_low, i_high, category) in breakpoints:
         if c_low <= c <= c_high:
             if c_high == float('inf'):
