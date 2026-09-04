@@ -1,51 +1,48 @@
 /**
- * AQIHeatmap.jsx — IDW spatial interpolation via Canvas + L.imageOverlay
+ * AQIHeatmap.jsx — Professional Environmental Spatial Pollution Heatmap
  *
- * Architecture:
- *   1. Fetch real telemetry (lat, lon, aqi) via getEnvironmentMap()
- *   2. Compute an adaptive max-influence radius from the median
- *      nearest-neighbour distance of the actual readings.
- *   3. For every pixel of an off-screen canvas:
- *      a. Convert pixel → lat/lon
- *      b. IDW-interpolate AQI from nearby readings only (within maxDist)
- *      c. If no reading is within maxDist → pixel stays fully transparent
- *      d. Map interpolated AQI → RGBA colour
- *   4. Export canvas as PNG data-URL → L.imageOverlay over exact bounds
- *   5. Add tiny (r=2) coloured dots at every actual measurement location
- *
- * Why NOT leaflet.heat:
- *   leaflet.heat *adds* Gaussian kernels for every point.  With 300 nearby
- *   readings even at AQI 40 they stack up to look red.  Tuning radius/blur
- *   cannot fix this structural problem.
- *
- * Why IDW:
- *   Each pixel gets a weighted average of only the measurements that are
- *   geographically close enough to be meaningful.  Pixels far from every
- *   measurement remain transparent — exactly what a GIS pollution layer does.
+ * Implementation details:
+ *   1. REAL DATA: Consumes actual latitude, longitude, and AQI from getEnvironmentMap(missionId).
+ *   2. GEODESIC IDW: Computes multi-point inverse distance weighting (power = 2) in true metric meters,
+ *      accounting for latitude convergence at Ambernath (~19.03° N).
+ *   3. FIXED COLOR SCALE:
+ *      0–50: Green | 51–100: Yellow | 101–150: Orange | 151–200: Red | 201+: Dark Red
+ *      Absolute AQI mapping guarantees consistent color meaning across the entire map.
+ *   4. ORGANIC COVERAGE & NO RECTANGLES:
+ *      Canvas bounds are expanded by maxDistMeters so coverage naturally dissipates into
+ *      complete transparency without rectangular clipping or hard edges.
+ *   5. TRIPLE-FACTOR SPATIAL INTENSITY:
+ *      Alpha is modulated by:
+ *      - Spatial distance to supporting measurements
+ *      - Local measurement density
+ *      - Interpolated AQI magnitude
+ *   6. SUBTLE TELEMETRY GROUND-TRUTH:
+ *      Telemetry measurements appear as delicate micro-dots on top of the continuous heat surface.
+ *      Hovering displays full telemetry readings in a responsive tooltip.
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getEnvironmentMap } from '../services/api';
 import { Thermometer, MapPin, Info } from 'lucide-react';
 
-// ─── tunables ───────────────────────────────────────────────────────────────
-const IDW_P       = 2;      // IDW power — controls how sharply influence falls off
-const CANVAS_PX   = 380;    // base canvas dimension (px); aspect-ratio corrected
-const NN_MULT     = 3.0;    // maxInfluence = medianNearestNeighbour × NN_MULT
-const DIST_FLOOR  = 0.0008; // minimum influence radius (~90 m in degrees)
-const DIST_CAP    = 0.006;  // maximum influence radius (~660 m in degrees)
+// ─── IDW & GIS Constants ───────────────────────────────────────────────────
+const IDW_P                  = 2;     // Inverse-distance power (p = 2)
+const CANVAS_PX              = 420;   // High-resolution off-screen raster dimension
+const MAX_INFLUENCE_DISTANCE = 320;   // Configurable maximum influence radius in meters
+const METERS_PER_DEG_LAT     = 111139;// WGS84 latitude meter conversion
 
-// ─── AQI → colour ramp ──────────────────────────────────────────────────────
-// Smooth linear interpolation between these stops.
+// ─── Continuous AQI Color Ramp ──────────────────────────────────────────────
+// Fixed scale across all missions:
+// 0–50: Green | 51–100: Yellow | 101–150: Orange | 151–200: Red | 201+: Dark Red
 const RAMP = [
-  { v:   0, r:  34, g: 197, b:  94 }, // Good
-  { v:  50, r: 134, g: 239, b: 172 }, // Good-high
-  { v: 100, r: 234, g: 179, b:   8 }, // Moderate
-  { v: 150, r: 249, g: 115, b:  22 }, // USG
-  { v: 200, r: 239, g:  68, b:  68 }, // Unhealthy
-  { v: 300, r: 127, g:  29, b:  29 }, // Very Unhealthy
+  { v:   0, r:  34, g: 197, b:  94 }, // Good (Green)
+  { v:  50, r:  34, g: 197, b:  94 }, // Good upper bound
+  { v:  51, r:  74, g: 222, b: 128 }, // Transition to yellow
+  { v: 100, r: 234, g: 179, b:   8 }, // Moderate (Yellow)
+  { v: 150, r: 249, g: 115, b:  22 }, // USG (Orange)
+  { v: 200, r: 239, g:  68, b:  68 }, // Unhealthy (Red)
+  { v: 300, r: 127, g:  29, b:  29 }, // Very Unhealthy (Dark Red)
 ];
 
 function aqiRGB(aqi) {
@@ -66,16 +63,7 @@ function aqiRGB(aqi) {
   return last;
 }
 
-// Alpha increases with AQI magnitude.
-// AQI  0  → 35  (very subtle green haze)
-// AQI 100 → 122 (clearly visible orange)
-// AQI 200 → 210 (vivid red, but still shows basemap)
-function aqiAlpha(aqi) {
-  const t = Math.min(Math.max(aqi / 200, 0), 1);
-  return (35 + t * 175) | 0;
-}
-
-// ─── AQI metadata for UI and dot colours ────────────────────────────────────
+// Category metadata for labels and dots
 function aqiMeta(aqi) {
   if (!isFinite(aqi)) return { color: '#6B7280', label: 'Unknown' };
   if (aqi > 200) return { color: '#7F1D1D', label: 'Very Unhealthy' };
@@ -85,143 +73,193 @@ function aqiMeta(aqi) {
   return { color: '#22C55E', label: 'Good' };
 }
 
-// ─── Median nearest-neighbour distance (sampled for speed) ──────────────────
-// Used to derive an influence radius proportional to survey density.
-function medianNN(pts) {
-  if (pts.length < 2) return DIST_FLOOR;
-  const step   = Math.max(1, Math.ceil(pts.length / 80));
-  const sample = pts.filter((_, i) => i % step === 0);
-  const dists  = sample.map(a => {
-    let best = Infinity;
-    for (const b of pts) {
-      if (b === a) continue;
-      const d = Math.hypot(a.latitude - b.latitude, a.longitude - b.longitude);
-      if (d < best) best = d;
-    }
-    return best;
-  });
-  dists.sort((a, b) => a - b);
-  return dists[dists.length >> 1];
-}
 
-// ─── Spatial hash table ──────────────────────────────────────────────────────
-// Bucket size = maxDist so that all candidates within maxDist live in
-// the current bucket or one of its 8 direct neighbours.
-function buildHash(pts, sz) {
-  const h = new Map();
+// ─── Spatial Hash Grid (Metric coordinates) ─────────────────────────────────
+function buildMetricHash(pts, cellSizeM, bounds, cosLat) {
+  const hash = new Map();
+  const kx = METERS_PER_DEG_LAT * cosLat;
+  const ky = METERS_PER_DEG_LAT;
+
   for (const p of pts) {
-    const k = `${Math.floor(p.longitude / sz)},${Math.floor(p.latitude / sz)}`;
-    const bucket = h.get(k);
-    if (bucket) bucket.push(p); else h.set(k, [p]);
+    const xm = (p.longitude - bounds.minLon) * kx;
+    const ym = (p.latitude - bounds.minLat) * ky;
+    const cx = Math.floor(xm / cellSizeM);
+    const cy = Math.floor(ym / cellSizeM);
+    const key = `${cx},${cy}`;
+    const cell = hash.get(key);
+    if (cell) cell.push(p);
+    else hash.set(key, [p]);
   }
-  return h;
+  return hash;
 }
 
-// ─── IDW for a single geographic point ───────────────────────────────────────
-// Returns interpolated AQI or null if no reading is within maxDist.
-function idwAt(lat, lon, hash, sz, maxDist) {
-  const bx = Math.floor(lon / sz);
-  const by = Math.floor(lat / sz);
-  let wSum = 0, aSum = 0;
+// ─── IDW Spatial Interpolation with Multi-Point Support ────────────────────
+function interpolateAt(lat, lon, hash, bounds, cellSizeM, maxDistM, cosLat) {
+  const kx = METERS_PER_DEG_LAT * cosLat;
+  const ky = METERS_PER_DEG_LAT;
+
+  const xm = (lon - bounds.minLon) * kx;
+  const ym = (lat - bounds.minLat) * ky;
+  const cx = Math.floor(xm / cellSizeM);
+  const cy = Math.floor(ym / cellSizeM);
+
+  let wSum = 0;
+  let aSum = 0;
+  let minDist = Infinity;
+  let count = 0;
+
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
-      const cell = hash.get(`${bx + dx},${by + dy}`);
+      const cell = hash.get(`${cx + dx},${cy + dy}`);
       if (!cell) continue;
       for (const p of cell) {
         if (!isFinite(p.aqi)) continue;
-        const dist = Math.hypot(lat - p.latitude, lon - p.longitude);
-        if (dist > maxDist) continue;
-        // Avoid division by zero; points extremely close yield huge weight
-        const w = dist < 1e-10 ? 1e15 : 1 / (dist * dist); // IDW_P=2 unrolled
+        const dxM = (lon - p.longitude) * kx;
+        const dyM = (lat - p.latitude) * ky;
+        const dist = Math.hypot(dxM, dyM);
+
+        if (dist > maxDistM) continue;
+
+        count++;
+        if (dist < minDist) minDist = dist;
+
+        if (dist < 0.5) {
+          return { aqi: p.aqi, minDist: 0, count: 1 };
+        }
+
+        const w = 1 / (dist * dist); // IDW power = 2
         wSum += w;
         aSum += p.aqi * w;
       }
     }
   }
-  return wSum > 0 ? aSum / wSum : null;
+
+  if (count === 0 || wSum === 0) return null;
+
+  return {
+    aqi: aSum / wSum,
+    minDist,
+    count,
+  };
 }
 
-// ─── Off-screen canvas IDW render ────────────────────────────────────────────
-// Returns a PNG data-URL, or null on failure.
-function renderIDWCanvas(pts, bounds) {
-  const { minLat, maxLat, minLon, maxLon } = bounds;
-  const dLat = maxLat - minLat;
-  const dLon = maxLon - minLon;
+// ─── Off-Screen Canvas Surface Generator ─────────────────────────────────────
+function renderIDWCanvas(pts, baseBounds, defaultMaxDist, cosLat) {
+  // 1. Calculate Adaptive Max Distance based on drone's actual sampling resolution
+  let totalDist = 0, distCount = 0;
+  const kx = METERS_PER_DEG_LAT * cosLat;
+  const ky = METERS_PER_DEG_LAT;
+  
+  for (let i = 1; i < pts.length; i++) {
+    const dx = (pts[i].longitude - pts[i-1].longitude) * kx;
+    const dy = (pts[i].latitude - pts[i-1].latitude) * ky;
+    const d = Math.sqrt(dx*dx + dy*dy);
+    if (d > 0 && d < 1000) {
+      totalDist += d;
+      distCount++;
+    }
+  }
+  
+  // Median/Average step size, scaled to ensure a continuous but tight footprint
+  const avgDist = distCount > 0 ? totalDist / distCount : 50;
+  const maxDistM = Math.max(40, Math.min(150, avgDist * 3.5)); // Strict footprint limit
+
+  // 2. Pad bounding box generously (1.5x maxDistM) so the edge of the canvas is 100% transparent.
+  // This physically guarantees no rectangular cutoff artifacts.
+  const latPad = (maxDistM * 1.5) / METERS_PER_DEG_LAT;
+  const lonPad = (maxDistM * 1.5) / (METERS_PER_DEG_LAT * cosLat);
+
+  const bounds = {
+    minLat: baseBounds.minLat - latPad,
+    maxLat: baseBounds.maxLat + latPad,
+    minLon: baseBounds.minLon - lonPad,
+    maxLon: baseBounds.maxLon + lonPad,
+  };
+
+  const dLat = bounds.maxLat - bounds.minLat;
+  const dLon = bounds.maxLon - bounds.minLon;
   if (dLat <= 0 || dLon <= 0) return null;
 
-  // Preserve geographic aspect ratio
-  const aspect = dLon / dLat;
+  const aspect = (dLon * cosLat) / dLat;
   const W = aspect >= 1 ? CANVAS_PX : Math.max(1, Math.round(CANVAS_PX * aspect));
   const H = aspect >= 1 ? Math.max(1, Math.round(CANVAS_PX / aspect)) : CANVAS_PX;
 
-  // Derive adaptive influence radius from point spacing
-  const medDist = medianNN(pts);
-  const maxDist = Math.min(Math.max(medDist * NN_MULT, DIST_FLOOR), DIST_CAP);
+  const hash = buildMetricHash(pts, maxDistM, bounds, cosLat);
 
-  const hash = buildHash(pts, maxDist);
-
-  const canvas  = document.createElement('canvas');
-  canvas.width  = W;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
   canvas.height = H;
-  const ctx     = canvas.getContext('2d');
-  const img     = ctx.createImageData(W, H);
-  const px      = img.data;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const px = img.data;
 
   for (let py = 0; py < H; py++) {
-    const lat = maxLat - (py / H) * dLat; // top row = maxLat
+    const lat = bounds.maxLat - (py / H) * dLat;
     for (let xi = 0; xi < W; xi++) {
-      const lon = minLon + (xi / W) * dLon;
-      const aqi = idwAt(lat, lon, hash, maxDist, maxDist);
-      if (aqi === null) continue;               // outside survey area → transparent
+      const lon = bounds.minLon + (xi / W) * dLon;
+
+      const res = interpolateAt(lat, lon, hash, bounds, maxDistM, maxDistM, cosLat);
+      if (!res) continue; // Outside survey coverage → transparent
+
+      const { aqi, minDist, count } = res;
+
+      // ─── Triple-Factor Alpha: A = Density × DistanceFalloff × AQIMagnitude ───
+      // 1. Density: Higher opacity when multiple telemetry measurements support the region
+      const density = Math.min(1.0, 0.35 + 0.65 * (count / 4.0));
+
+      // 2. Distance Falloff: Smooth quadratic fade to exactly 0 before maxDistM
+      const distNorm = Math.min(1.0, minDist / maxDistM);
+      const distanceFalloff = Math.pow(1.0 - distNorm, 2); // Smoothly hits 0 at maxDistM
+
+      if (distanceFalloff <= 0.01) continue; // Fully faded out, removing rect artifacts
+
+      // 3. AQI Magnitude: Higher AQI has stronger visual prominence
+      const aqiMagnitude = 0.60 + 0.40 * Math.min(1.0, Math.max(0, aqi / 200));
+
+      // Final Opacity: Max 190 ensures underlying street basemap remains clearly readable
+      const alpha = Math.round(190 * density * distanceFalloff * aqiMagnitude);
+      if (alpha < 4) continue;
 
       const { r, g, b } = aqiRGB(aqi);
-      const a            = aqiAlpha(aqi);
-      const i            = (py * W + xi) * 4;
-      px[i]     = r;
-      px[i + 1] = g;
-      px[i + 2] = b;
-      px[i + 3] = a;
+      const idx = (py * W + xi) * 4;
+      px[idx]     = r;
+      px[idx + 1] = g;
+      px[idx + 2] = b;
+      px[idx + 3] = alpha;
     }
   }
 
   ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return {
+    dataUrl: canvas.toDataURL('image/png'),
+    overlayBounds: bounds,
+  };
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
-export default function AQIHeatmap({ missionId }) {
+// ─── Main Component ─────────────────────────────────────────────────────────
+export default function AQIHeatmap({ telemetry }) {
   const containerRef = useRef(null);
   const mapRef       = useRef(null);
-  const overlayRef   = useRef(null);   // L.imageOverlay — IDW surface
-  const dotsRef      = useRef(null);   // L.layerGroup  — measurement dots
+  const overlayRef   = useRef(null);
+  const dotsRef      = useRef(null);
 
-  const [envData,   setEnvData]   = useState([]);
-  const [loading,   setLoading]   = useState(true);
   const [computing, setComputing] = useState(false);
   const [tooltip,   setTooltip]   = useState(null);
   const [tipPos,    setTipPos]    = useState({ x: 0, y: 0 });
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!missionId) return;
-    setLoading(true);
-    setEnvData([]);
-    getEnvironmentMap(missionId)
-      .then(d => setEnvData(d || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [missionId]);
+  const envData = useMemo(() => telemetry || [], [telemetry]);
+  const loading = false;
 
-  // ── Valid points ──────────────────────────────────────────────────────────
+  // ── Valid Real Readings ──────────────────────────────────────────────────
   const pts = useMemo(() =>
     envData.filter(p =>
-      isFinite(p.latitude) && isFinite(p.longitude) &&
+      isFinite(p.latitude) && isFinite(p.longitude) && isFinite(p.aqi) &&
       p.latitude  > -90  && p.latitude  < 90 &&
       p.longitude > -180 && p.longitude < 180,
     ),
   [envData]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  // ── Real Statistics ──────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const aqis = pts.map(p => p.aqi).filter(isFinite);
     if (!aqis.length) return null;
@@ -233,7 +271,7 @@ export default function AQIHeatmap({ missionId }) {
     };
   }, [pts]);
 
-  // ── Init Leaflet map once ─────────────────────────────────────────────────
+  // ── Initialize Leaflet Map ────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, {
@@ -242,110 +280,144 @@ export default function AQIHeatmap({ missionId }) {
       scrollWheelZoom: true,
       preferCanvas: true,
     });
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
-    mapRef.current = map;
+
+    dotsRef.current = L.layerGroup().addTo(map);
+    mapRef.current  = map;
+
     return () => {
       map.remove();
-      mapRef.current   = null;
+      mapRef.current     = null;
       overlayRef.current = null;
-      dotsRef.current  = null;
+      dotsRef.current    = null;
     };
   }, []);
 
-  // ── Rebuild surface + dots when pts change ────────────────────────────────
+  // ── Rebuild IDW Surface & Telemetry Points ───────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Tear down stale layers
-    if (overlayRef.current) { map.removeLayer(overlayRef.current); overlayRef.current = null; }
-    if (dotsRef.current)    { dotsRef.current.clearLayers(); }
+    if (overlayRef.current) {
+      map.removeLayer(overlayRef.current);
+      overlayRef.current = null;
+    }
+    if (dotsRef.current) {
+      dotsRef.current.clearLayers();
+    }
 
     if (!pts.length) return;
 
     const lats = pts.map(p => p.latitude);
-    const lons  = pts.map(p => p.longitude);
-    const bounds = {
+    const lons = pts.map(p => p.longitude);
+    const baseBounds = {
       minLat: Math.min(...lats), maxLat: Math.max(...lats),
       minLon: Math.min(...lons), maxLon: Math.max(...lons),
     };
-    const leafletBounds = L.latLngBounds(
-      [bounds.minLat, bounds.minLon],
-      [bounds.maxLat, bounds.maxLon],
+
+    // Auto-fit map to exact surveyed telemetry coordinates
+    const leafletBoundsPoints = L.latLngBounds(
+      [baseBounds.minLat, baseBounds.minLon],
+      [baseBounds.maxLat, baseBounds.maxLon],
     );
+    map.fitBounds(leafletBoundsPoints, { padding: [45, 45], maxZoom: 16 });
 
-    // Fit map to exact mission bounds
-    map.fitBounds(leafletBounds, { padding: [40, 40], maxZoom: 16 });
+    const midLat = (baseBounds.minLat + baseBounds.maxLat) / 2;
+    const cosLat = Math.cos((midLat * Math.PI) / 180);
 
-    // Run IDW after two animation frames so the map tiles render first
     setComputing(true);
-    const raf1 = requestAnimationFrame(() => {
+    const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const dataUrl = renderIDWCanvas(pts, bounds);
+        const result = renderIDWCanvas(pts, baseBounds, MAX_INFLUENCE_DISTANCE, cosLat);
         setComputing(false);
-        if (!dataUrl || !mapRef.current) return;
 
-        // Overlay the IDW surface as a geo-referenced PNG
-        overlayRef.current = L.imageOverlay(dataUrl, leafletBounds, {
-          opacity: 1,       // per-pixel alpha from canvas controls transparency
+        if (!result || !mapRef.current) return;
+
+        const { dataUrl, overlayBounds } = result;
+        const leafletOverlayBounds = L.latLngBounds(
+          [overlayBounds.minLat, overlayBounds.minLon],
+          [overlayBounds.maxLat, overlayBounds.maxLon],
+        );
+
+        // Continuous raster overlay with per-pixel IDW & alpha
+        overlayRef.current = L.imageOverlay(dataUrl, leafletOverlayBounds, {
+          opacity: 1.0,
           interactive: false,
           zIndex: 200,
-          className: 'aqi-idw-overlay',
+          className: 'aqi-idw-raster-surface',
         }).addTo(mapRef.current);
 
-        // Dot layer — tiny coloured markers at actual measurement locations
-        if (!dotsRef.current) {
-          dotsRef.current = L.layerGroup().addTo(mapRef.current);
-        }
-
+        // Render Telemetry Markers (Subtle micro-dots for spatial ground truth)
         pts.forEach(p => {
-          const { color } = aqiMeta(p.aqi);
+          const meta = aqiMeta(p.aqi);
 
-          // Visible micro-dot  (non-interactive — keeps layer simple)
+          // Subtle visible micro-marker
           L.circleMarker([p.latitude, p.longitude], {
-            radius: 2,
-            fillColor: color,
-            fillOpacity: 0.85,
-            color: 'rgba(255,255,255,0.4)',
-            weight: 0.5,
+            radius: 1.5,
+            fillColor: meta.color,
+            fillOpacity: 0.7,
+            color: 'rgba(255,255,255,0.3)',
+            weight: 0.4,
             interactive: false,
           }).addTo(dotsRef.current);
 
-          // Larger invisible hit-area for hover tooltip
+          // Interactive hit-area for hover tooltip
           const hit = L.circleMarker([p.latitude, p.longitude], {
             radius: 8,
             fillOpacity: 0,
             opacity: 0,
             interactive: true,
           });
+
+          // Native Leaflet tooltip ensures instant, robust hover display
+          hit.bindTooltip(`
+            <div style="font-family: monospace; font-size: 11px; line-height: 1.4; min-width: 150px;">
+              <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px; font-weight:bold; color:${meta.color}; border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:3px;">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${meta.color}"></span>
+                ${meta.label} · AQI ${p.aqi.toFixed(1)}
+              </div>
+              <div>PM2.5: <b>${p.pm25 != null ? p.pm25.toFixed(1) : '—'}</b></div>
+              <div>PM10: <b>${p.pm10 != null ? p.pm10.toFixed(1) : '—'}</b></div>
+              <div>Altitude: <b>${p.altitude != null ? p.altitude.toFixed(1) + ' m' : '—'}</b></div>
+              <div style="color:#aaa; font-size:10px;">${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}</div>
+              ${p.timestamp ? `<div style="color:#888; font-size:9px; margin-top:2px;">${new Date(p.timestamp).toLocaleTimeString()}</div>` : ''}
+            </div>
+          `, { direction: 'top', offset: [0, -6], opacity: 0.96, className: 'aqi-leaflet-tooltip' });
+
           hit.on('mouseover', e => {
             const rect = containerRef.current?.getBoundingClientRect();
             if (!rect) return;
-            setTooltip({ ...p, ...aqiMeta(p.aqi) });
+            setTooltip({ ...p, ...meta });
             setTipPos({ x: e.originalEvent.clientX - rect.left, y: e.originalEvent.clientY - rect.top });
           });
+
           hit.on('mousemove', e => {
             const rect = containerRef.current?.getBoundingClientRect();
             if (!rect) return;
             setTipPos({ x: e.originalEvent.clientX - rect.left, y: e.originalEvent.clientY - rect.top });
           });
-          hit.on('mouseout', () => setTooltip(null));
+
+          hit.on('mouseout', () => {
+            setTooltip(null);
+          });
+
           hit.addTo(dotsRef.current);
         });
       });
     });
 
-    return () => cancelAnimationFrame(raf1);
+    return () => cancelAnimationFrame(raf);
   }, [pts]);
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ── Render Component Layout ───────────────────────────────────────────────
   return (
-    <div className="border border-border rounded-lg bg-surface-primary overflow-hidden flex flex-col">
+    <div className="border border-border rounded-lg bg-surface-primary overflow-hidden flex flex-col shadow-sm h-full w-full">
 
-      {/* Header */}
+      {/* Main Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border bg-surface-elevated/60">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-8 h-8 rounded bg-telemetry/10 border border-telemetry/30">
@@ -369,7 +441,7 @@ export default function AQIHeatmap({ missionId }) {
           </div>
         )}
 
-        {/* Fixed-scale AQI legend */}
+        {/* Standard Environmental AQI Legend */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           {[
             ['0–50',   '#22C55E', 'Good'],
@@ -377,8 +449,8 @@ export default function AQIHeatmap({ missionId }) {
             ['101–150','#F97316', 'USG'],
             ['151–200','#EF4444', 'Bad'],
             ['201+',   '#7F1D1D', 'V.Bad'],
-          ].map(([range, color]) => (
-            <div key={range} className="flex items-center gap-1">
+          ].map(([range, color, label]) => (
+            <div key={range} className="flex items-center gap-1" title={label}>
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
               <span className="text-[9px] font-mono text-text-muted">{range}</span>
             </div>
@@ -386,14 +458,14 @@ export default function AQIHeatmap({ missionId }) {
         </div>
       </div>
 
-      {/* Map viewport */}
-      <div className="relative" style={{ height: '420px' }}>
+      {/* Map Viewport */}
+      <div className="relative flex-1 w-full min-h-[400px]">
 
         {(loading || computing) && (
-          <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center bg-surface-secondary">
+          <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center bg-surface-secondary/90 backdrop-blur-xs">
             <div className="w-8 h-8 border-4 border-telemetry border-t-transparent rounded-full animate-spin mb-3" />
             <p className="text-text-muted font-mono text-xs uppercase tracking-widest">
-              {loading ? 'Loading telemetry…' : 'Computing IDW surface…'}
+              {loading ? 'Loading telemetry…' : 'Calculating IDW spatial surface…'}
             </p>
           </div>
         )}
@@ -405,14 +477,18 @@ export default function AQIHeatmap({ missionId }) {
           </div>
         )}
 
-        {/* Leaflet mount */}
+        {/* Leaflet Mount */}
         <div ref={containerRef} className="w-full h-full" />
 
-        {/* Hover tooltip */}
+        {/* Real-Point Hover Tooltip */}
         {tooltip && (
           <div
-            className="absolute z-[600] pointer-events-none bg-surface-elevated/95 border border-border shadow-2xl rounded p-2.5"
-            style={{ top: tipPos.y + 14, left: tipPos.x + 14, minWidth: 195 }}
+            className="absolute z-[600] pointer-events-none bg-surface-elevated/95 border border-border shadow-2xl rounded p-2.5 backdrop-blur-xs"
+            style={{
+              top: Math.min(Math.max(10, tipPos.y + 14), 420 - 190),
+              left: Math.min(Math.max(10, tipPos.x + 14), (containerRef.current?.clientWidth || 700) - 225),
+              minWidth: 205,
+            }}
           >
             <div className="flex items-center gap-2 mb-2 border-b border-border/50 pb-1.5">
               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tooltip.color }} />

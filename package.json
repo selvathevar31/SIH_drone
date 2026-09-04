@@ -19,6 +19,8 @@
     "react-leaflet": "^4.2.1",
     "recharts": "^2.10.3",
     "resium": "^1.25.0",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^6.0.1",
     "tailwind-merge": "^2.2.0",
     "vite-plugin-cesium": "^1.2.23"
   },

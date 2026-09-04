@@ -66,7 +66,9 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
 
   const [followDrone, setFollowDrone] = useState(false);
   const [operatorLoc, setOperatorLoc] = useState(null);
-  const [envData, setEnvData] = useState([]);
+  
+  // Use canonical flightPath instead of fetching
+  const envData = flightPath || [];
   
   // Layer controls
   const [layers, setLayers] = useState({
@@ -89,10 +91,6 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
   
   useEffect(() => {
     if (missionId) {
-      getEnvironmentMap(missionId).then(data => {
-        setEnvData(data);
-      }).catch(console.error);
-      
       getPollutionZones(missionId).then(data => {
         if(data && data.zones) setZonesData(data.zones);
       }).catch(console.error);

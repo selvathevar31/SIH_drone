@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ComposedChart, Scatter, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ZAxis } from 'recharts';
-import { getAltitudeProfile } from '../services/api';
 
 const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
@@ -47,35 +46,46 @@ const getSeverityColorHex = (severity) => {
   return '#64748B';
 };
 
-export default function PollutionAltitudeChart({ missionId, timeParams }) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function PollutionAltitudeChart({ telemetry }) {
   const [metric, setMetric] = useState('pm25'); // pm25, pm10, aqi
 
-  useEffect(() => {
-    let isMounted = true;
-    if (!missionId) return;
-
-    setLoading(true);
-    getAltitudeProfile(missionId, timeParams)
-      .then(res => {
-        if (isMounted) setData(res);
-      })
-      .catch(err => console.error("Altitude profile error", err))
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
-
-    return () => { isMounted = false; };
-  }, [missionId, timeParams]);
-
-  if (loading) {
-    return (
-      <div className="border border-border rounded-lg bg-surface-primary p-5 h-full flex items-center justify-center min-h-[300px]">
-        <div className="text-telemetry font-mono font-bold tracking-widest uppercase text-sm animate-pulse">Loading Profile...</div>
-      </div>
-    );
-  }
+  const data = useMemo(() => {
+    if (!telemetry || telemetry.length === 0) return [];
+    
+    // Group by 5m altitude buckets
+    const BUCKET_SIZE = 5;
+    const buckets = {};
+    
+    telemetry.forEach(t => {
+      if (t.altitude == null) return;
+      const bucket = Math.round(t.altitude / BUCKET_SIZE) * BUCKET_SIZE;
+      if (!buckets[bucket]) {
+        buckets[bucket] = { altitude: bucket, count: 0, pm25: 0, pm10: 0, aqi: 0 };
+      }
+      buckets[bucket].count++;
+      buckets[bucket].pm25 += (t.pm25 || 0);
+      buckets[bucket].pm10 += (t.pm10 || 0);
+      buckets[bucket].aqi += (t.aqi || 0);
+    });
+    
+    const aggregated = Object.values(buckets).map(b => ({
+      ...b,
+      pm25: b.pm25 / b.count,
+      pm10: b.pm10 / b.count,
+      aqi: b.aqi / b.count
+    })).sort((a, b) => a.altitude - b.altitude);
+    
+    // Compute severity
+    aggregated.forEach(b => {
+      if (b.aqi > 200) b.severity = 'Severe';
+      else if (b.aqi > 150) b.severity = 'Very Poor';
+      else if (b.aqi > 100) b.severity = 'Poor';
+      else if (b.aqi > 50) b.severity = 'Moderate';
+      else b.severity = 'Good';
+    });
+    
+    return aggregated;
+  }, [telemetry]);
 
   if (!data || data.length === 0) {
     return (

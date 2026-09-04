@@ -7,11 +7,17 @@ export async function getMissions(signal) {
 }
 
 export async function getDashboard(missionId, params = {}, signal) {
+    console.log(`[DEBUG FRONTEND] getDashboard called with missionId: ${missionId}`);
     const query = new URLSearchParams(params).toString();
     const url = query ? `${API_URL}/dashboard/${missionId}?${query}` : `${API_URL}/dashboard/${missionId}`;
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error("Failed to fetch dashboard data");
-    return res.json();
+    const data = await res.json();
+    console.log(`[DEBUG FRONTEND] getDashboard response telemetry count (trend length): ${data.trend?.length || 0}`);
+    if (data.trend && data.trend.length > 0) {
+        console.log(`[DEBUG FRONTEND] First telemetry record received:`, data.trend[0]);
+    }
+    return data;
 }
 
 export async function getEnvironmentMap(missionId, params = {}, signal) {
@@ -51,7 +57,9 @@ export async function uploadCSV(file, missionId = null) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Upload failed");
     }
-    return res.json();
+    const data = await res.json();
+    console.log(`[DEBUG FRONTEND] uploadCSV returned mission_id: ${data.mission_id}`);
+    return data;
 }
 
 export async function loadDemoCSV() {

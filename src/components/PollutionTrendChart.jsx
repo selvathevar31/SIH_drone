@@ -20,10 +20,10 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-export default function PollutionTrendChart({ trend, mission }) {
+export default function PollutionTrendChart({ telemetry, mission }) {
   const [metric, setMetric] = useState('all'); // pm25, pm10, aqi, all
 
-  if (!trend || trend.length === 0) {
+  if (!telemetry || telemetry.length === 0) {
     return (
       <div className="border border-border rounded-lg bg-surface-primary p-5 h-full flex flex-col items-center justify-center min-h-[300px]">
         <div className="text-text-muted font-bold tracking-widest mb-2 uppercase">Insufficient Data</div>
@@ -33,7 +33,7 @@ export default function PollutionTrendChart({ trend, mission }) {
   }
 
   // Find a hotspot timestamp for the reference line (first occurrence)
-  const hotspotPoint = trend.find(p => p.isHotspot);
+  const hotspotPoint = telemetry.find(p => p.isHotspot);
 
   return (
     <div className="border border-border rounded-lg bg-surface-primary p-5 h-full flex flex-col min-h-[300px]">
@@ -58,7 +58,7 @@ export default function PollutionTrendChart({ trend, mission }) {
       
       <div className="flex-1 w-full min-h-[250px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={trend} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={telemetry} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorAqi" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#F97316" stopOpacity={0.3}/>

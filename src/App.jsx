@@ -19,6 +19,7 @@ import { Clock } from 'lucide-react';
 import PollutionTrendChart from './components/PollutionTrendChart';
 import PollutionAltitudeChart from './components/PollutionAltitudeChart';
 import AQIHeatmap from './components/AQIHeatmap';
+import IntelligencePanel from './components/IntelligencePanel';
 
 function App() {
   const [missions, setMissions] = useState([]);
@@ -227,7 +228,10 @@ function App() {
 
   // Derive timeParams for child components
   const latestTimestamp = dashboardData?.mission?.end_time;
-  const childTimeParams = getTimeParams(latestTimestamp);
+  const timeParams = getTimeParams(latestTimestamp);
+  
+  // Use canonical telemetry for components
+  const telemetryData = dashboardData?.telemetry || [];
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
@@ -318,57 +322,100 @@ function App() {
           {dashboardData && !isLoading && !error && currentView === 'overview' && (
             <div className="max-w-[1920px] mx-auto flex flex-col gap-4 lg:gap-6">
               
-              {/* Time Filter Bar */}
-              <div className="flex justify-between items-center bg-surface-elevated p-2 rounded border border-border">
-                <div className="flex items-center gap-2 text-text-muted text-xs font-mono font-bold uppercase">
-                  <Clock className="w-4 h-4" /> Global Time Filter
+              {/* TOP STATUS BAR */}
+              <div className="flex justify-between items-center bg-surface-elevated px-4 py-2 rounded-lg border border-border shadow-sm">
+                <div className="flex items-center gap-6">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">Mission ID</span>
+                    <span className="text-sm font-mono font-bold text-telemetry">{dashboardData.mission.mission_id}</span>
+                  </div>
+                  <div className="h-6 w-px bg-border/50"></div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">Status</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-safe animate-pulse"></div>
+                      <span className="text-xs font-bold text-safe uppercase tracking-wider">Active</span>
+                    </div>
+                  </div>
+                  <div className="h-6 w-px bg-border/50 hidden md:block"></div>
+                  <div className="flex-col hidden md:flex">
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">System</span>
+                    <span className="text-xs font-bold text-text-primary uppercase tracking-wider">Nominal</span>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {['ALL', '30M', '15M', '5M'].map(tf => (
-                    <button
-                      key={tf}
-                      onClick={() => setTimeFilter(tf)}
-                      className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded transition-colors ${timeFilter === tf ? 'bg-telemetry text-background shadow' : 'bg-surface-secondary text-text-muted hover:text-text-primary border border-border'}`}
-                    >
-                      {tf === 'ALL' ? 'Full Mission' : `Last ${tf.replace('M', ' Min')}`}
-                    </button>
-                  ))}
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 text-text-muted text-xs font-mono font-bold uppercase hidden lg:flex">
+                    <Clock className="w-4 h-4" /> Global Time Filter
+                  </div>
+                  <div className="flex gap-1 bg-surface-secondary p-0.5 rounded border border-border">
+                    {['ALL', '30M', '15M', '5M'].map(tf => (
+                      <button
+                        key={tf}
+                        onClick={() => setTimeFilter(tf)}
+                        className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-colors ${timeFilter === tf ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'}`}
+                      >
+                        {tf === 'ALL' ? 'Full' : `${tf}`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Demo Control Center removed as per SIH guidelines */}
+              {/* MAIN COMMAND CENTER GRID */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 min-h-[850px]">
+                
+                {/* LEFT: Intelligence Panel */}
+                <div className="xl:col-span-3 flex flex-col gap-4 order-2 xl:order-1 h-full">
+                  <IntelligencePanel 
+                    telemetry={telemetryData} 
+                    stats={dashboardData.mission_stats} 
+                    hotspots={dashboardData.hotspots} 
+                    mission={dashboardData.mission} 
+                  />
+                </div>
 
-              {/* ROW 1: MetricCards */}
-              <MetricCards stats={dashboardData.mission_stats} />
+                {/* CENTER: Spatial Map & Charts */}
+                <div className="xl:col-span-7 flex flex-col gap-4 order-1 xl:order-2 h-full">
+                  <div className="h-[600px] w-full">
+                    <AQIHeatmap telemetry={telemetryData} />
+                  </div>
+                  
+                  {/* 2D and 3D Maps */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-[400px]">
+                    <MissionMap 
+                      missionId={dashboardData.mission.mission_id}
+                      flightPath={telemetryData} 
+                      currentLocation={dashboardData.current_location} 
+                      hotspots={dashboardData.hotspots}
+                      telemetry={dashboardData.current_environment}
+                    />
+                    <MissionMap3D 
+                      missionId={dashboardData.mission.mission_id}
+                      flightPath={telemetryData} 
+                      currentLocation={dashboardData.current_location} 
+                      hotspots={dashboardData.hotspots}
+                      telemetry={dashboardData.current_environment}
+                    />
+                  </div>
+                  
+                  {/* CHARTS BELOW MAPS */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-[300px]">
+                     <div className="h-full">
+                       <PollutionTrendChart telemetry={telemetryData} mission={dashboardData.mission} />
+                     </div>
+                     <div className="h-full">
+                       <PollutionAltitudeChart telemetry={telemetryData} />
+                     </div>
+                  </div>
+                </div>
 
-              {/* ROW 2: The Two Charts side-by-side */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[350px]">
-                <PollutionTrendChart trend={dashboardData.trend} mission={dashboardData.mission} />
-                <PollutionAltitudeChart missionId={dashboardData.mission.mission_id} timeParams={childTimeParams} />
+                {/* RIGHT: Metric Cards */}
+                <div className="xl:col-span-2 flex flex-col gap-4 order-3 h-full">
+                  <MetricCards stats={dashboardData.mission_stats} />
+                </div>
+
               </div>
-
-              {/* ROW 3: The Maps side-by-side */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[500px]">
-                <MissionMap 
-                  missionId={dashboardData.mission.mission_id}
-                  flightPath={dashboardData.flight_path} 
-                  currentLocation={dashboardData.current_location} 
-                  hotspots={dashboardData.hotspots}
-                  telemetry={dashboardData.current_environment}
-                  mapLocateTarget={mapLocateTarget}
-                />
-                <MissionMap3D 
-                  missionId={dashboardData.mission.mission_id}
-                  flightPath={dashboardData.flight_path} 
-                  currentLocation={dashboardData.current_location} 
-                  hotspots={dashboardData.hotspots}
-                  telemetry={dashboardData.current_environment}
-                />
-              </div>
-
-              {/* ROW 4: AQI Thermal Heatmap — full width below 3D map */}
-              <AQIHeatmap missionId={dashboardData.mission.mission_id} />
-
             </div>
           )}
         </main>

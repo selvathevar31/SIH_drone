@@ -38,14 +38,10 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
     }
   };
 
-  // Fetch actual mission readings (same as 2D map)
+  // Use canonical flightPath instead of fetching
   useEffect(() => {
-    if (missionId) {
-      getEnvironmentMap(missionId).then(data => {
-        setEnvData(data || []);
-      }).catch(console.error);
-    }
-  }, [missionId]);
+    setEnvData(flightPath || []);
+  }, [flightPath]);
 
   // Derive bounding box and center from envData
   const geoBounds = useMemo(() => {
