@@ -1,0 +1,25 @@
+{
+  "aqi_status": {
+    "good": "चांगले",
+    "moderate": "मध्यम",
+    "poor": "वाईट",
+    "severe": "गंभीर",
+    "toxic": "विषारी"
+  },
+  "my_location": "माझे स्थान",
+  "hourly_forecast": "तासिका अंदाज",
+  "metrics_labels": {
+    "pm25": "PM2.5",
+    "pm10": "PM10",
+    "co2": "CO2",
+    "humidity": "आर्द्रता"
+  },
+  "assistant_placeholder_text": "एक संदेश लिहा...",
+  "assistant_greeting": "मी FLUXX AI आहे, आपला पर्यावरणीय बुद्धिमत्ता सहाय्यक.",
+  "assistant_response_pm25": "आपल्या क्षेत्रातील वर्तमान **PM2.5** पातळी **38.5 µg/m³** आहे, जी *मध्यम* श्रेणीत (US AQI 72) येते.",
+  "assistant_response_aqi": "सध्याचा **AQI 72 (मध्यम)** आहे. प्राथमिक प्रदूषक PM2.5 38.5 µg/m³ वर आहे.",
+  "assistant_response_humidity": "सापेक्ष आर्द्रता सध्या **68%** आहे. हायड्रेटेड राहा आणि बाहेर असताना सावली शोधा.",
+  "error_connecting": "FLUXX शी कनेक्ट करताना त्रुटी.",
+  "locating": "शोधत आहे...",
+  "select_language": "भाषा निवडा"
+}
