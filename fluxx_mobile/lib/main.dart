@@ -8,7 +8,7 @@ import 'ui/screens/fluxx_dashboard_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
-  MapboxOptions.setAccessToken(AppConfig.mapboxAccessToken);
+  MapboxOptions.setAccessToken(AppConfig.mapboxToken);
 
   runApp(
     EasyLocalization(

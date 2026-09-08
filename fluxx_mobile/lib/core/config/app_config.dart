@@ -10,7 +10,7 @@ class AppConfig {
   // Mapbox Integration
   // TODO: Paste your real Mapbox Public Access Token here for production.
   // The UI HeatmapCard will immediately reference this key to load the Mapbox Map GL view.
-  static const String mapboxToken = 'INSERT_PUBLIC_TOKEN';
+  static const String mapboxToken = String.fromEnvironment('MAPBOX_TOKEN');
 
   // N8N RAG Webhook Endpoint
   static const String n8nRagWebhookUrl = ''; // Paste your N8N Webhook URL
