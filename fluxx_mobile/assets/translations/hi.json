@@ -1,0 +1,25 @@
+{
+  "aqi_status": {
+    "good": "अच्छा",
+    "moderate": "मध्यम",
+    "poor": "खराब",
+    "severe": "गंभीर",
+    "toxic": "जहरीला"
+  },
+  "my_location": "मेरा स्थान",
+  "hourly_forecast": "प्रति घंटा पूर्वानुमान",
+  "metrics_labels": {
+    "pm25": "PM2.5",
+    "pm10": "PM10",
+    "co2": "CO2",
+    "humidity": "नमी"
+  },
+  "assistant_placeholder_text": "एक संदेश लिखें...",
+  "assistant_greeting": "मैं FLUXX AI हूँ, आपका पर्यावरणीय बुद्धिमान सहायक।",
+  "assistant_response_pm25": "आपके क्षेत्र में वर्तमान **PM2.5** स्तर **38.5 µg/m³** है, जो *मध्यम* श्रेणी (US AQI 72) में है।",
+  "assistant_response_aqi": "वर्तमान **AQI 72 (मध्यम)** है। प्राथमिक प्रदूषक PM2.5 38.5 µg/m³ पर है।",
+  "assistant_response_humidity": "सापेक्ष आर्द्रता वर्तमान में **68%** है। हाइड्रेटेड रहें और बाहर होने पर छाया की तलाश करें।",
+  "error_connecting": "FLUXX से जुड़ने में त्रुटि।",
+  "locating": "खोज रहा है...",
+  "select_language": "भाषा चुनें"
+}

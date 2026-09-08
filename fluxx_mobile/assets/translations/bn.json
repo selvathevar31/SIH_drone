@@ -1,0 +1,25 @@
+{
+  "aqi_status": {
+    "good": "ভালো",
+    "moderate": "মাঝারি",
+    "poor": "খারাপ",
+    "severe": "গুরুতর",
+    "toxic": "বিষাক্ত"
+  },
+  "my_location": "My Location",
+  "hourly_forecast": "HOURLY FORECAST",
+  "metrics_labels": {
+    "pm25": "PM2.5",
+    "pm10": "PM10",
+    "co2": "CO2",
+    "humidity": "HUMIDITY"
+  },
+  "assistant_placeholder_text": "Type a message...",
+  "assistant_greeting": "I'm FLUXX AI, your environmental intelligence assistant. I can answer questions about AQI, PM2.5, PM10, CO₂, humidity, and provide health recommendations based on real-time sensor data.",
+  "assistant_response_pm25": "Current **PM2.5** levels in your area are **38.5 µg/m³**, which is in the *Moderate* category (US AQI 72). Sensitive individuals should consider reducing prolonged outdoor exertion.",
+  "assistant_response_aqi": "The current **AQI is 72 (Moderate)**. The primary pollutant is PM2.5 at 38.5 µg/m³. Air quality is acceptable; however, there may be a moderate health concern for a very small number of people who are unusually sensitive to air pollution.",
+  "assistant_response_humidity": "Relative humidity is currently **68%**. Combined with the current temperature of 31.4 °C, the heat index is approximately **38 °C**. Stay hydrated and seek shade when outdoors.",
+  "error_connecting": "Error connecting to FLUXX.",
+  "locating": "Locating...",
+  "select_language": "Select Language"
+}
