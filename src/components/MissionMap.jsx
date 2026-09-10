@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { Crosshair, MapPin, Navigation, Map as MapIcon, Layers } from 'lucide-react';
 import { getEnvironmentMap, getPollutionZones, getPersistentHotspots } from '../services/api';
 import HeatmapLayer from './HeatmapLayer';
+import { cityColor } from './DatasetSelector';
 
 // Fix for default marker icons in React Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -60,7 +61,7 @@ const recommendedIcon = new L.Icon({
 });
 
 // Component completely removed in favor of strict mapRef effects
-export default function MissionMap({ missionId, flightPath, currentLocation, hotspots, telemetry, mapLocateTarget, simulation }) {
+export default function MissionMap({ missionId, flightPath, currentLocation, hotspots, telemetry, mapLocateTarget, simulation, allDatasets, onDatasetHover }) {
   const mapRef = useRef(null);
   const initializedRef = useRef(false);
 
@@ -69,6 +70,18 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
   
   // Use canonical flightPath instead of fetching
   const envData = flightPath || [];
+  
+  useEffect(() => {
+    const validPoints = envData.filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number');
+    if (validPoints.length > 0) {
+        const lats = validPoints.map(p => p.latitude);
+        const lons = validPoints.map(p => p.longitude);
+        console.log(`[DEBUG MissionMap 2D] Telemetry point count:`, validPoints.length);
+        console.log(`[DEBUG MissionMap 2D] First coordinate: lat ${validPoints[0].latitude}, lon ${validPoints[0].longitude}`);
+        console.log(`[DEBUG MissionMap 2D] Last coordinate: lat ${validPoints[validPoints.length - 1].latitude}, lon ${validPoints[validPoints.length - 1].longitude}`);
+        console.log(`[DEBUG MissionMap 2D] Bounds: MinLat: ${Math.min(...lats)}, MaxLat: ${Math.max(...lats)}, MinLon: ${Math.min(...lons)}, MaxLon: ${Math.max(...lons)}`);
+    }
+  }, [envData]);
   
   // Layer controls
   const [layers, setLayers] = useState({
@@ -348,6 +361,65 @@ export default function MissionMap({ missionId, flightPath, currentLocation, hot
                 color="#22D3EE" weight={3} opacity={0.7} 
             />
           )}
+
+          {/* Extra city flight paths from allDatasets */}
+          {layers.route && allDatasets && allDatasets.map((ds, idx) => {
+            if (ds.missionId === missionId) return null;
+            const pts = (ds.telemetry || []).filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number');
+            if (pts.length < 2) return null;
+            return (
+              <Polyline
+                key={`path-${ds.missionId}`}
+                positions={pts.map(p => [p.latitude, p.longitude])}
+                color={cityColor(idx)}
+                weight={2.5}
+                opacity={0.6}
+              />
+            );
+          })}
+
+          {/* Extra city measurement markers */}
+          {layers.measurements && allDatasets && allDatasets.map((ds, idx) => {
+            if (ds.missionId === missionId) return null;
+            const pts = (ds.telemetry || []).filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number');
+            return pts.map((pt, i) => (
+              <CircleMarker
+                key={`ext-${ds.missionId}-${i}`}
+                center={[pt.latitude, pt.longitude]}
+                radius={3}
+                pathOptions={{ color: cityColor(idx), fillColor: cityColor(idx), fillOpacity: 0.75, weight: 1 }}
+                eventHandlers={{
+                  mouseover: () => { if (onDatasetHover) onDatasetHover(ds.missionId); },
+                  mouseout:  () => { if (onDatasetHover) onDatasetHover(null); },
+                }}
+              >
+                <Popup className="custom-popup">
+                  <div className="font-mono text-xs">
+                    <strong style={{ color: cityColor(idx) }} className="block mb-1 uppercase text-sm border-b border-border pb-1">
+                      {ds.cityLabel} — AQI {pt.aqi?.toFixed(1) ?? 'N/A'}
+                    </strong>
+                    <div className="flex justify-between py-1"><span className="text-text-muted">PM2.5</span><span>{pt.pm25?.toFixed(1) ?? 'N/A'} µg/m³</span></div>
+                    <div className="flex justify-between py-1"><span className="text-text-muted">PM10</span><span>{pt.pm10?.toFixed(1) ?? 'N/A'} µg/m³</span></div>
+                    <div className="flex justify-between py-1"><span className="text-text-muted">Altitude</span><span>{pt.altitude?.toFixed(1) ?? 'N/A'} m</span></div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ));
+          })}
+
+          {/* Primary mission measurement markers with hover */}
+          {layers.measurements && envData.map((pt, i) => (
+            <CircleMarker
+              key={`env-hover-${i}`}
+              center={[pt.latitude, pt.longitude]}
+              radius={0}
+              pathOptions={{ opacity: 0, fillOpacity: 0 }}
+              eventHandlers={{
+                mouseover: () => { if (onDatasetHover) onDatasetHover(missionId); },
+                mouseout:  () => { if (onDatasetHover) onDatasetHover(null); },
+              }}
+            />
+          ))}
           
           {layers.heatmap && heatmapData.points.length > 0 && (
              <HeatmapLayer points={heatmapData.points} max={heatmapData.max} />

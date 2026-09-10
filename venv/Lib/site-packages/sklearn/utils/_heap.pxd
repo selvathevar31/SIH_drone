@@ -2,7 +2,7 @@
 
 from cython cimport floating
 
-from sklearn.utils._typedefs cimport intp_t
+from ._typedefs cimport intp_t
 
 
 cdef int heap_push(

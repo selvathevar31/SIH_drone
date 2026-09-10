@@ -7,8 +7,10 @@ import 'package:fluxx_mobile/core/models/hourly_forecast.dart';
 import 'package:fluxx_mobile/core/models/spatial_telemetry.dart';
 import 'package:fluxx_mobile/core/models/chat_response.dart';
 import 'package:fluxx_mobile/data/repositories/mock_aqi_repository.dart';
+import 'package:fluxx_mobile/data/repositories/api_aqi_repository.dart';
 import 'package:fluxx_mobile/data/repositories/live_chat_repository.dart';
 import 'package:fluxx_mobile/data/repositories/mock_localization_repository.dart';
+import 'package:fluxx_mobile/services/socket_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Repository Singleton Providers  (keepAlive equivalent: use .autoDispose
@@ -21,7 +23,7 @@ import 'package:fluxx_mobile/data/repositories/mock_localization_repository.dart
 /// Provides the singleton [IAqiRepository] implementation.
 /// Swap [MockAqiRepository] for [SupabaseAqiRepository] here when ready.
 final aqiRepositoryProvider = Provider<IAqiRepository>(
-  (_) => const MockAqiRepository(),
+  (_) => const ApiAqiRepository(),
 );
 
 /// Provides the singleton [IChatRepository] implementation.
@@ -52,6 +54,24 @@ final hourlyForecastProvider = FutureProvider<List<HourlyForecast>>((ref) {
 /// Consumed via: ref.watch(spatialTelemetryProvider)
 final spatialTelemetryProvider = FutureProvider<SpatialTelemetry>((ref) {
   return ref.watch(aqiRepositoryProvider).getSpatialTelemetry();
+});
+
+/// WebSockets real-time telemetry stream
+final socketServiceProvider = Provider<SocketService>((ref) {
+  final service = SocketService();
+  service.init();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+final liveTelemetryStreamProvider = StreamProvider<SpatialTelemetry>((ref) {
+  final socketService = ref.watch(socketServiceProvider);
+  return socketService.telemetryStream;
+});
+
+final socketConnectionStreamProvider = StreamProvider<bool>((ref) {
+  final socketService = ref.watch(socketServiceProvider);
+  return socketService.connectionStream;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

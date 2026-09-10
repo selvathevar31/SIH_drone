@@ -1,4 +1,27 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+if (import.meta.env.DEV) {
+    API_URL = 'http://localhost:8000/api';
+}
+if (API_URL.endsWith('/')) {
+    API_URL = API_URL.slice(0, -1);
+}
+
+const originalFetch = window.fetch;
+const fetch = async function(url, options = {}) {
+    try {
+        return await originalFetch(url, options);
+    } catch (error) {
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+            window.dispatchEvent(new Event('backend-connection-lost'));
+            return {
+                ok: false,
+                status: 503,
+                json: async () => ({ error: "Backend Connection Lost" })
+            };
+        }
+        throw error;
+    }
+};
 
 export async function getMissions(signal) {
     const res = await fetch(`${API_URL}/missions`, { signal });
@@ -55,7 +78,7 @@ export async function uploadCSV(file, missionId = null) {
     
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Upload failed");
+        throw new Error(err.detail || err.error || "Upload failed");
     }
     const data = await res.json();
     console.log(`[DEBUG FRONTEND] uploadCSV returned mission_id: ${data.mission_id}`);

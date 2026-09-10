@@ -11,9 +11,12 @@ The module contains:
     * Fast rand_r alternative based on xor shifts
 """
 import numpy as np
-from sklearn.utils.validation import check_random_state
+from . import check_random_state
 
-from sklearn.utils._typedefs cimport intp_t
+from ._typedefs cimport intp_t
+
+
+cdef uint32_t DEFAULT_SEED = 1
 
 
 # Compatibility type to always accept the default int type used by NumPy, both

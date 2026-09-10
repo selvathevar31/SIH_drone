@@ -27,28 +27,50 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
         const results = [];
         let headersChecked = false;
         let missingCols = [];
+        let missingColsErrorMsg = '';
         let totalRows = 0;
         let acceptedRows = 0;
         let rejectedRows = 0;
         const validReadings = [];
         const errors = [];
         const warnings = [];
+        const originalHeaders = [];
+        const mappedHeaders = [];
 
         stream
             .pipe(csv({
                 mapHeaders: ({ header }) => {
-                    const cleanCol = header.toLowerCase().trim();
-                    if (aliasMap[cleanCol]) return aliasMap[cleanCol];
-                    if (['timestamp', 'latitude', 'longitude', 'altitude', 'pm1', 'pm25', 'pm10', 'temperature', 'humidity'].includes(cleanCol)) {
-                        return cleanCol;
+                    originalHeaders.push(header);
+                    const cleanCol = header.replace(/^\uFEFF/, '').toLowerCase().trim();
+                    let mappedCol = cleanCol;
+                    
+                    if (/^pm\s*[\-_\.]?\s*2[\.\_]?5$/.test(cleanCol)) mappedCol = 'pm25';
+                    else if (/^pm\s*[\-_\.]?\s*10(\.0)?$/.test(cleanCol)) mappedCol = 'pm10';
+                    else if (/^pm\s*[\-_\.]?\s*1(\.0)?$/.test(cleanCol)) mappedCol = 'pm1';
+                    else if (aliasMap[cleanCol]) mappedCol = aliasMap[cleanCol];
+                    else if (['timestamp', 'latitude', 'longitude', 'altitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength'].includes(cleanCol)) {
+                        mappedCol = cleanCol;
                     }
-                    return header;
+                    
+                    mappedHeaders.push(mappedCol);
+                    return mappedCol;
                 }
             }))
             .on('headers', (headers) => {
-                const requiredCols = ['timestamp', 'latitude', 'longitude', 'altitude', 'pm25', 'pm10', 'temperature', 'humidity'];
+                console.log(`[CSV PARSER] Original headers:`, originalHeaders);
+                console.log(`[CSV PARSER] Mapped headers:`, headers);
+                
+                const requiredCols = ['timestamp', 'latitude', 'longitude', 'pm25', 'pm10'];
                 missingCols = requiredCols.filter(col => !headers.includes(col));
                 if (missingCols.length > 0) {
+                    let errorMsg = `Missing required columns: ${missingCols.join(', ')}.`;
+                    if (missingCols.includes('pm25')) {
+                        errorMsg += ` Accepted names for pm25: pm25, PM25, pm2.5, PM2.5, pm_25.`;
+                    }
+                    if (missingCols.includes('pm10')) {
+                        errorMsg += ` Accepted names for pm10: pm10, PM10, pm10.0, pm_10.`;
+                    }
+                    missingColsErrorMsg = errorMsg;
                     // Destroy stream to stop processing
                     stream.destroy();
                 }
@@ -214,10 +236,11 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 acceptedRows++;
             })
             .on('end', () => {
+                console.log(`[CSV PARSER] End of stream. Total rows parsed: ${totalRows}`);
                 if (missingCols.length > 0) {
                     resolve({
                         success: false,
-                        error: `Missing required columns: ${missingCols.join(', ')}`,
+                        error: missingColsErrorMsg,
                         total_rows: totalRows,
                         accepted_rows: 0,
                         rejected_rows: totalRows,
@@ -255,7 +278,7 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 if (missingCols.length > 0) {
                     resolve({
                         success: false,
-                        error: `Missing required columns: ${missingCols.join(', ')}`,
+                        error: missingColsErrorMsg,
                         total_rows: totalRows,
                         accepted_rows: 0,
                         rejected_rows: totalRows,

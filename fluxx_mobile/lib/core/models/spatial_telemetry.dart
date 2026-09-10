@@ -67,8 +67,8 @@ class SpatialTelemetry {
   final String? geoJson;
 
   const SpatialTelemetry({
-    required this.points,
-    required this.geoJsonUrl,
+    this.points = const [],
+    this.geoJsonUrl = '',
     this.geoJson,
   });
 

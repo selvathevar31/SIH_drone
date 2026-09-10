@@ -3,18 +3,17 @@ from cython.operator cimport dereference as deref
 from cython.parallel cimport parallel, prange
 from libcpp.vector cimport vector
 
-from numbers import Integral
+from ...utils._cython_blas cimport _dot
+from ...utils._openmp_helpers cimport omp_get_thread_num
+from ...utils._typedefs cimport intp_t, float32_t, float64_t, int32_t
 
 import numpy as np
+
 from scipy.sparse import issparse
-
-from sklearn.utils._cython_blas cimport _dot
-from sklearn.utils._openmp_helpers cimport omp_get_thread_num
-from sklearn.utils._typedefs cimport intp_t, float32_t, float64_t, int32_t
-
+from numbers import Integral
 from sklearn import get_config
 from sklearn.utils import check_scalar
-from sklearn.utils._openmp_helpers import _openmp_effective_n_threads
+from ...utils._openmp_helpers import _openmp_effective_n_threads
 
 #####################
 
@@ -103,7 +102,7 @@ cdef float64_t[::1] _sqeuclidean_row_norms64_sparse(
 
 {{for name_suffix in ["64", "32"]}}
 
-from sklearn.metrics._pairwise_distances_reduction._datasets_pair cimport DatasetsPair{{name_suffix}}
+from ._datasets_pair cimport DatasetsPair{{name_suffix}}
 
 
 cpdef float64_t[::1] _sqeuclidean_row_norms{{name_suffix}}(

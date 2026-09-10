@@ -3,6 +3,7 @@ const { detectHotspotsForReadings } = require('../services/hotspotDetector');
 const Mission = require('../models/Mission');
 const Reading = require('../models/Reading');
 const Hotspot = require('../models/Hotspot');
+const { broadcastTelemetry } = require('../socket');
 
 exports.uploadCsv = async (req, res) => {
     if (!req.file) {
@@ -87,6 +88,30 @@ exports.uploadCsv = async (req, res) => {
             mission_id: missionId
         }));
         await Hotspot.insertMany(hDocs);
+    }
+    
+    // Broadcast GeoJSON payload to connected WebSockets
+    const features = result.readings
+        .filter(r => r.latitude != null && r.longitude != null)
+        .map(r => ({
+            type: "Feature",
+            geometry: {
+                type: "Point",
+                coordinates: [r.longitude, r.latitude]
+            },
+            properties: {
+                aqi: r.aqi || 0,
+                pm25: r.pm25 || 0,
+                pm10: r.pm10 || 0,
+                temperature: r.temperature || 0
+            }
+        }));
+
+    if (features.length > 0) {
+        broadcastTelemetry(JSON.stringify({
+            type: "FeatureCollection",
+            features: features
+        }));
     }
     
     res.json({

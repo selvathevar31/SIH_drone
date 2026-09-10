@@ -61,7 +61,7 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
       // Ensure we stay on the detecting step for at least a moment to show the progression
       setTimeout(() => {
         setUploadResult(result);
-        if (onUploadSuccess) onUploadSuccess(result.mission_id);
+        if (onUploadSuccess) onUploadSuccess(result.mission_id, file?.name || '');
         setIsUploading(false);
         setUploadStep('');
       }, 2000);
@@ -161,7 +161,7 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
 
       {/* CSV Upload Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
           <div className="bg-surface-primary border border-border rounded-lg shadow-2xl w-full max-w-md flex flex-col relative overflow-hidden">
             <div className="p-4 border-b border-border flex justify-between items-center bg-surface-elevated">
               <h3 className="font-bold text-text-primary tracking-wide uppercase">Import Mission Data</h3>

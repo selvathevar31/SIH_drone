@@ -8,7 +8,7 @@ integers, and values float.
 
 from libcpp.map cimport map as cpp_map
 
-from sklearn.utils._typedefs cimport float64_t, intp_t
+from ._typedefs cimport float64_t, intp_t
 
 
 ###############################################################################

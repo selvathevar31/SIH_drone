@@ -4,12 +4,64 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../core/theme/apple_theme.dart';
 import '../../data/providers/repository_providers.dart';
 
-class HeatmapCard extends ConsumerWidget {
+class HeatmapCard extends ConsumerStatefulWidget {
   const HeatmapCard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final telemetryAsync = ref.watch(spatialTelemetryProvider);
+  ConsumerState<HeatmapCard> createState() => _HeatmapCardState();
+}
+
+class _HeatmapCardState extends ConsumerState<HeatmapCard> {
+  MapboxMap? mapboxMap;
+  bool isStyleLoaded = false;
+
+  void _onMapCreated(MapboxMap mapboxMap) {
+    this.mapboxMap = mapboxMap;
+  }
+
+  void _onStyleLoadedListener(StyleLoadedEventData data) async {
+    isStyleLoaded = true;
+
+    // Initialize the source and layer so that updates can patch it
+    await mapboxMap?.style.addSource(GeoJsonSource(
+      id: "aqi-source",
+      data: '{"type":"FeatureCollection","features":[]}',
+    ));
+    
+    await mapboxMap?.style.addLayer(HeatmapLayer(
+      id: "aqi-heatmap",
+      sourceId: "aqi-source",
+      heatmapRadius: 25.0,
+      heatmapColorExpression: [
+        "interpolate",
+        ["linear"],
+        ["heatmap-density"],
+        0.0, "rgba(0, 255, 0, 0)",
+        0.2, "rgba(0, 255, 0, 1)",
+        0.5, "rgba(255, 255, 0, 1)",
+        0.8, "rgba(255, 191, 0, 1)",
+        1.0, "rgba(255, 0, 255, 1)",
+      ],
+    ));
+
+    // If data already arrived before style loaded, update it now
+    final initialData = ref.read(liveTelemetryStreamProvider).valueOrNull?.geoJson;
+    if (initialData != null) {
+      mapboxMap?.style.updateGeoJsonSource("aqi-source", initialData);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connectionStateAsync = ref.watch(socketConnectionStreamProvider);
+    final isConnected = connectionStateAsync.valueOrNull ?? false;
+
+    ref.listen(liveTelemetryStreamProvider, (previous, next) {
+      final geoJsonString = next.valueOrNull?.geoJson;
+      if (isStyleLoaded && mapboxMap != null && geoJsonString != null) {
+        mapboxMap?.style.updateGeoJsonSource("aqi-source", geoJsonString);
+      }
+    });
 
     return Container(
       height: 200,
@@ -21,47 +73,23 @@ class HeatmapCard extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          telemetryAsync.when(
-            data: (telemetry) {
-              return MapWidget(
-                viewport: CameraViewportState(
-                  center: Point(coordinates: Position(73.01, 19.01)),
-                  zoom: 12.0,
-                ),
-                onMapCreated: (MapboxMap mapboxMap) async {
-                  if (telemetry.geoJson != null) {
-                    await mapboxMap.style.addSource(GeoJsonSource(
-                      id: "aqi-source",
-                      data: telemetry.geoJson!,
-                    ));
-                    
-                    await mapboxMap.style.addLayer(HeatmapLayer(
-                      id: "aqi-heatmap",
-                      sourceId: "aqi-source",
-                      heatmapRadius: 25.0,
-                      heatmapColorExpression: [
-                        "interpolate",
-                        ["linear"],
-                        ["heatmap-density"],
-                        0.0, "rgba(0, 255, 0, 0)",
-                        0.2, "rgba(0, 255, 0, 1)",
-                        0.5, "rgba(255, 255, 0, 1)",
-                        0.8, "rgba(255, 191, 0, 1)",
-                        1.0, "rgba(255, 0, 255, 1)",
-                      ],
-                    ));
-                  }
-                },
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator(color: Colors.white)),
-            error: (e, st) => Center(
+          MapWidget(
+            viewport: CameraViewportState(
+              center: Point(coordinates: Position(73.01, 19.01)),
+              zoom: 12.0,
+            ),
+            onMapCreated: _onMapCreated,
+            onStyleLoadedListener: _onStyleLoadedListener,
+          ),
+          if (!isConnected)
+            Container(
+              color: Colors.black54,
+              alignment: Alignment.center,
               child: Text(
-                'Error loading map data',
-                style: FluxxTypography.secondaryMetric.copyWith(color: Colors.red),
+                'Offline - Waiting for backend socket connection...',
+                style: FluxxTypography.secondaryMetric.copyWith(color: Colors.redAccent),
               ),
             ),
-          ),
           Positioned(
             bottom: 16,
             left: 16,

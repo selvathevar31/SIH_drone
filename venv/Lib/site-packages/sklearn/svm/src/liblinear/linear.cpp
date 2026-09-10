@@ -73,7 +73,7 @@ static void info(const char *fmt,...)
 	char buf[BUFSIZ];
 	va_list ap;
 	va_start(ap,fmt);
-	vsnprintf(buf,sizeof buf,fmt,ap);
+	vsprintf(buf,fmt,ap);
 	va_end(ap);
 	(*liblinear_print_string)(buf);
 }

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Cartesian3, Color, Material, Math as CesiumMath, HeadingPitchRoll, Transforms, Ion, UrlTemplateImageryProvider, ArcGisMapServerImageryProvider, createWorldImageryAsync, IonWorldImageryStyle, createWorldTerrainAsync, createOsmBuildingsAsync, Viewer, PointPrimitiveCollection, PolylineCollection, ImageryLayer, Rectangle, ScreenSpaceEventType, defined } from 'cesium';
 import { Crosshair, Navigation, Globe, Map as MapIcon, Info, Route, X, Maximize2, Minimize2 } from 'lucide-react';
 import { getEnvironmentMap } from '../services/api';
-import { generateAdaptiveSurvey } from '../utils/geoUtils';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 export default function MissionMap3D({ missionId, flightPath, currentLocation, hotspots, telemetry }) {
@@ -56,6 +55,11 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
     
+    console.log(`[DEBUG MissionMap3D] Telemetry point count:`, valid.length);
+    console.log(`[DEBUG MissionMap3D] First coordinate: lat ${valid[0].latitude}, lon ${valid[0].longitude}`);
+    console.log(`[DEBUG MissionMap3D] Last coordinate: lat ${valid[valid.length - 1].latitude}, lon ${valid[valid.length - 1].longitude}`);
+    console.log(`[DEBUG MissionMap3D] Bounds: MinLat: ${minLat}, MaxLat: ${maxLat}, MinLon: ${minLon}, MaxLon: ${maxLon}`);
+    
     return {
       minLat, maxLat, minLon, maxLon,
       centerLat: (minLat + maxLat) / 2,
@@ -63,11 +67,6 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
       validPoints: valid
     };
   }, [envData]);
-
-  // Generate Adaptive Survey Plan
-  const surveyData = useMemo(() => {
-    return generateAdaptiveSurvey(envData, geoBounds);
-  }, [envData, geoBounds]);
 
   // Derive live active position (for drone tracking)
   const activeCenter = useMemo(() => {
@@ -287,23 +286,23 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
     }
   }, [activeCenter, followDrone, cesiumState.ready]);
 
-  // Update Optimized Flight Path
+  // Update Actual Flight Path
   useEffect(() => {
-    if (!flightPathLinesRef.current || !cesiumState.ready || !surveyData || surveyData.optimizedWaypoints.length < 2) return;
+    if (!flightPathLinesRef.current || !cesiumState.ready || !geoBounds || geoBounds.validPoints.length < 2) return;
     
     const lines = flightPathLinesRef.current;
     lines.removeAll();
     
-    const positions = surveyData.optimizedWaypoints.map(p => Cartesian3.fromDegrees(p.longitude, p.latitude, Number.isFinite(p.altitude) ? p.altitude : 0));
+    const positions = geoBounds.validPoints.map(p => Cartesian3.fromDegrees(p.longitude, p.latitude, Number.isFinite(p.altitude) ? p.altitude : 0));
     
     if (positions.length > 1) {
       lines.add({
         positions: positions,
-        width: 4,
+        width: 3,
         material: Material.fromType('Color', { color: Color.CYAN })
       });
     }
-  }, [surveyData, cesiumState.ready]);
+  }, [geoBounds, cesiumState.ready]);
 
   const getAQIColor = (aqi) => {
     if (aqi == null || !Number.isFinite(aqi)) return Color.GRAY;
@@ -314,24 +313,24 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
     return Color.fromCssColorString('#22C55E'); // Green
   };
 
-  // Update Actual Readings, Waypoints & Vertical Drop Lines
+  // Update Actual Readings
   useEffect(() => {
     if (!pointsRef.current || !dropLinesRef.current || !geoBounds) return;
     
     const points = pointsRef.current;
-    const dropLines = dropLinesRef.current;
     points.removeAll();
-    dropLines.removeAll();
     
-    // A. RAW MEASUREMENTS (Small, semi-transparent)
+    // A. RAW MEASUREMENTS
     geoBounds.validPoints.forEach(pt => {
       const alt = Number.isFinite(pt.altitude) ? pt.altitude : 0;
       const pointColor = getAQIColor(pt.aqi);
 
       points.add({
         position: Cartesian3.fromDegrees(pt.longitude, pt.latitude, alt),
-        color: pointColor.withAlpha(0.3),
-        pixelSize: 4,
+        color: pointColor,
+        pixelSize: 6,
+        outlineColor: Color.WHITE.withAlpha(0.5),
+        outlineWidth: 1.0,
         id: {
             properties: {
                 type: 'reading',
@@ -346,42 +345,7 @@ export default function MissionMap3D({ missionId, flightPath, currentLocation, h
         }
       });
     });
-
-    // B. OPTIMIZED SURVEY WAYPOINTS (Large markers with drop lines)
-    if (surveyData && surveyData.optimizedWaypoints) {
-      surveyData.optimizedWaypoints.forEach(wp => {
-        const alt = Number.isFinite(wp.altitude) ? wp.altitude : 0;
-        const pointColor = getAQIColor(wp.aqi);
-
-        points.add({
-          position: Cartesian3.fromDegrees(wp.longitude, wp.latitude, alt),
-          color: pointColor,
-          pixelSize: 10,
-          outlineColor: Color.WHITE,
-          outlineWidth: 2.0,
-          id: {
-            properties: {
-                type: 'reading',
-                aqi: wp.aqi,
-                altitude: wp.altitude,
-                latitude: wp.latitude,
-                longitude: wp.longitude
-            }
-          }
-        });
-
-        // Draw vertical drop line to ground
-        dropLines.add({
-          positions: [
-            Cartesian3.fromDegrees(wp.longitude, wp.latitude, alt),
-            Cartesian3.fromDegrees(wp.longitude, wp.latitude, 0)
-          ],
-          width: 1.5,
-          material: Material.fromType('Color', { color: pointColor.withAlpha(0.5) })
-        });
-      });
-    }
-  }, [geoBounds, surveyData, cesiumState.ready]);
+  }, [geoBounds, cesiumState.ready]);
 
   // Update Hotspots
   useEffect(() => {
