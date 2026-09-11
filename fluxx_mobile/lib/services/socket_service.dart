@@ -29,31 +29,28 @@ class SocketService {
     );
 
     _socket?.onConnect((_) {
-      print('[Socket] Connected to $apiUrl');
       _connectionStateController.add(SocketConnectionState.connected);
     });
 
     _socket?.onDisconnect((_) {
-      print('[Socket] Disconnected from $apiUrl');
       _connectionStateController.add(SocketConnectionState.disconnected);
     });
 
     _socket?.onConnectError((err) {
-      print('[Socket] Connect error to $apiUrl: $err');
       _connectionStateController.add(SocketConnectionState.disconnected);
     });
 
-    _socket?.on('telemetry_update', (data) {
+    _socket?.on('telemetry_updated', (data) {
       try {
         final geoJsonString = data is String ? data : jsonEncode(data);
         final telemetry = SpatialTelemetry(
-          points: const [], // GeoJSON points handled directly in Mapbox source
+          points: const [],
           geoJsonUrl: '',
           geoJson: geoJsonString
         );
         _telemetryController.add(telemetry);
-      } catch (e) {
-        print('[Socket] Error parsing telemetry_update: $e');
+      } catch (_) {
+        // Silently discard malformed telemetry frames
       }
     });
 

@@ -94,9 +94,7 @@ class _FloatingChatButtonState extends State<FloatingChatButton> with TickerProv
 
 /// A custom Curve that behaves like a Spring.
 class SpringCurve extends Curve {
-  const SpringCurve([this.a = 0.15, this.w = 19.4]);
-  final double a;
-  final double w;
+  const SpringCurve();
 
   @override
   double transformInternal(double t) {

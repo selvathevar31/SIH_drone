@@ -43,7 +43,7 @@ class HourlyForecastStrip extends StatelessWidget {
                     ),
                     Icon(
                       _getIcon(item.conditionIcon),
-                      color: Colors.white,
+                      color: _getIconColor(item.conditionIcon),
                       size: 24,
                     ),
                     Text(
@@ -62,7 +62,14 @@ class HourlyForecastStrip extends StatelessWidget {
 
   IconData _getIcon(String condition) {
     if (condition.toLowerCase().contains('sun')) return Icons.wb_sunny;
+    if (condition.toLowerCase().contains('rain') || condition.toLowerCase().contains('water') || condition.toLowerCase().contains('storm')) return Icons.water_drop;
     if (condition.toLowerCase().contains('cloud')) return Icons.cloud;
     return Icons.wb_cloudy;
+  }
+
+  Color _getIconColor(String condition) {
+    if (condition.toLowerCase().contains('sun')) return Colors.yellow;
+    if (condition.toLowerCase().contains('rain') || condition.toLowerCase().contains('water') || condition.toLowerCase().contains('storm')) return Colors.blue;
+    return Colors.white70;
   }
 }

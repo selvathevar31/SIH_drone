@@ -20,8 +20,6 @@ class ApiService {
   }) async {
     try {
       final url = Uri.parse('$baseUrl/api/aqi/chat');
-      print('[ApiService] Sending request to: $url');
-      print('[ApiService] Request payload: message="$prompt", mission_id="$missionId"');
 
       final response = await http.post(
         url,
@@ -32,18 +30,13 @@ class ApiService {
         }),
       ).timeout(const Duration(seconds: 15));
 
-      print('[ApiService] Response HTTP Status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-        print('[ApiService] Request successful.');
         return decoded;
       }
 
-      print('[ApiService] Error response body: ${response.body}');
       return {'answer': 'Server returned status ${response.statusCode}. Please try again.'};
     } catch (e) {
-      print('[ApiService] Request failed. Reason: $e');
       return {
         'answer': 'Unable to reach the FLUXX server. Please check your connection and try again.'
       };

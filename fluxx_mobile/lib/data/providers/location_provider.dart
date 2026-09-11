@@ -45,6 +45,4 @@ final locationProvider = FutureProvider<UserLocation>((ref) async {
     '${position.latitude.toStringAsFixed(4)}',
     '${position.longitude.toStringAsFixed(4)}',
   );
-
-  return UserLocation('Wahal', 'Maharashtra'); // Default fallback
 });

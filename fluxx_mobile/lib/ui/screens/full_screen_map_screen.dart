@@ -109,8 +109,8 @@ class _FullScreenMapScreenState extends ConsumerState<FullScreenMapScreen> {
                 }
               }
             }
-          } catch (e) {
-            print('[Mapbox] Error parsing GeoJSON to recenter full map: $e');
+          } catch (_) {
+            // Silently ignore GeoJSON parse errors for recentering
           }
         }
         if (data.hotspotsGeoJson != null) {
@@ -124,8 +124,8 @@ class _FullScreenMapScreenState extends ConsumerState<FullScreenMapScreen> {
         children: [
           MapWidget(
             viewport: CameraViewportState(
-              center: Point(coordinates: Position(73.01, 19.01)),
-              zoom: 12.0,
+              center: Point(coordinates: Position(77.2090, 28.6139)),
+              zoom: 11.0,
             ),
             onMapCreated: _onMapCreated,
             onStyleLoadedListener: _onStyleLoadedListener,

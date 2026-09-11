@@ -111,7 +111,6 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
                 if (coords.length >= 2) {
                   final lon = coords[0] is double ? coords[0] : double.parse(coords[0].toString());
                   final lat = coords[1] is double ? coords[1] : double.parse(coords[1].toString());
-                  print('[Mapbox] Recentering map to Mission Coordinate: Lat=$lat, Lon=$lon');
                   mapboxMap?.setCamera(CameraOptions(
                     center: Point(coordinates: Position(lon, lat)),
                     zoom: 12.0,
@@ -119,8 +118,8 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
                 }
               }
             }
-          } catch (e) {
-            print('[Mapbox] Error parsing GeoJSON to recenter map: $e');
+          } catch (_) {
+            // Silently ignore GeoJSON parse errors for recentering
           }
         }
         if (data.hotspotsGeoJson != null) {
@@ -143,8 +142,8 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
             child: IgnorePointer(
               child: MapWidget(
                 viewport: CameraViewportState(
-                  center: Point(coordinates: Position(73.01, 19.01)),
-                  zoom: 12.0,
+                  center: Point(coordinates: Position(77.2090, 28.6139)),
+                  zoom: 11.0,
                 ),
                 onMapCreated: _onMapCreated,
                 onStyleLoadedListener: _onStyleLoadedListener,
