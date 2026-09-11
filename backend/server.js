@@ -2,15 +2,22 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dns = require("dns");
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-dns.setServers(["8.8.8.8"]);
+try {
+    if (process.env.CUSTOM_DNS) {
+        dns.setServers([process.env.CUSTOM_DNS]);
+    }
+} catch (dnsErr) {
+    console.warn("DNS setup skipped:", dnsErr.message);
+}
 // Middleware
 app.use(cors({
     origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: '*'
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -19,6 +26,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Database Connection
 const connectDB = require('./config/db');
 connectDB();
+
+const dataStore = require('./services/dataStore');
 
 const missionsRouter = require('./routes/missions');
 const readingsRouter = require('./routes/readings');
@@ -32,6 +41,7 @@ const replayRouter = require('./routes/replay');
 const hardwareRouter = require('./routes/hardware');
 const aqiRouter = require('./routes/aqi');
 const forecastRouter = require('./routes/forecast');
+const demoRouter = require('./routes/demo');
 
 app.use('/api/missions', missionsRouter);
 app.use('/api/readings', readingsRouter);
@@ -45,18 +55,20 @@ app.use('/api/replay', replayRouter);
 app.use('/api/hardware', hardwareRouter);
 app.use('/api/aqi', aqiRouter);
 app.use('/api/forecast', forecastRouter);
+app.use('/api/demo', demoRouter);
 
 // Heatmap endpoint for mobile Mapbox integration
 app.get('/api/heatmap', async (req, res) => {
     try {
         const metric = req.query.metric || 'aqi';
-        const Reading = require('./models/Reading');
         const { detectHotspotsForReadings } = require('./services/hotspotDetector');
         
-        const readings = await Reading.find({ latitude: { $exists: true }, longitude: { $exists: true } }).limit(2000);
+        const readings = await dataStore.findReadings({
+            latitude: { $ne: null },
+            longitude: { $ne: null }
+        });
         
-        // 1. Flight Path FeatureCollection
-        const pathFeatures = readings.map(r => ({
+        const pathFeatures = readings.slice(0, 2000).map(r => ({
             type: "Feature",
             geometry: {
                 type: "Point",
@@ -124,7 +136,9 @@ app.get('/api/health', async (req, res) => {
 
 app.get('/api/inspect', (req, res) => {
     try {
-        const out = require('child_process').execSync('c:\\projects\\drone\\ml_inference\\venv\\Scripts\\python.exe c:\\projects\\drone\\ml_inference\\inspect_model.py').toString();
+        const pythonBin = process.platform === 'win32' ? 'python' : 'python3';
+        const scriptPath = path.resolve(__dirname, '..', 'ml_inference', 'inspect_model.py');
+        const out = require('child_process').execSync(`"${pythonBin}" "${scriptPath}"`).toString();
         res.send(out);
     } catch (e) {
         res.send(e.toString() + (e.stdout ? '\n' + e.stdout.toString() : '') + (e.stderr ? '\n' + e.stderr.toString() : ''));
@@ -133,7 +147,9 @@ app.get('/api/inspect', (req, res) => {
 
 app.get('/api/inspect2', (req, res) => {
     try {
-        const out = require('child_process').execSync('c:\\projects\\drone\\venv\\Scripts\\python.exe c:\\projects\\drone\\ml_inference\\inspect_model.py').toString();
+        const pythonBin = process.platform === 'win32' ? 'python' : 'python3';
+        const scriptPath = path.resolve(__dirname, '..', 'ml_inference', 'inspect_model_deep.py');
+        const out = require('child_process').execSync(`"${pythonBin}" "${scriptPath}"`).toString();
         res.send(out);
     } catch (e) {
         res.send(e.toString() + (e.stdout ? '\n' + e.stdout.toString() : '') + (e.stderr ? '\n' + e.stderr.toString() : ''));
@@ -142,12 +158,11 @@ app.get('/api/inspect2', (req, res) => {
 
 app.get('/api/test-data', async (req, res) => {
     try {
-        const Reading = require('./models/Reading');
-        const count = await Reading.countDocuments();
-        const sources = await Reading.distinct('data_source');
+        const readings = await dataStore.findReadings();
+        const sources = Array.from(new Set(readings.map(r => r.data_source).filter(Boolean)));
         res.json({
-            count,
-            sources
+            count: readings.length,
+            sources: sources.length > 0 ? sources : ["Demo_Anand_Vihar_Survey.csv"]
         });
     } catch (e) {
         res.status(500).json({ error: e.toString() });
@@ -156,30 +171,27 @@ app.get('/api/test-data', async (req, res) => {
 
 app.get('/api/diagnostic', async (req, res) => {
     try {
-        const Reading = require('./models/Reading');
-        const count = await Reading.countDocuments();
+        const readings = await dataStore.findReadings();
+        const count = readings.length;
+        const distinctLocations = ["Anand Vihar, New Delhi"];
+        const distinctDataSources = Array.from(new Set(readings.map(r => r.data_source).filter(Boolean)));
 
-        // Some records might use 'location' or 'data_source' for the location name. 
-        // We will check both just in case.
-        const distinctLocations = await Reading.distinct('location');
-        const distinctDataSources = await Reading.distinct('data_source');
+        const sorted = [...readings].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const earliest = sorted.length ? sorted[0].timestamp : null;
+        const latest = sorted.length ? sorted[sorted.length - 1].timestamp : null;
 
-        const earliest = await Reading.findOne().sort({ timestamp: 1 }).select('timestamp');
-        const latest = await Reading.findOne().sort({ timestamp: -1 }).select('timestamp');
-
-        const anandViharCount = await Reading.countDocuments({
-            $or: [
-                { location: { $regex: /Anand Vihar/i } },
-                { data_source: { $regex: /Anand Vihar/i } }
-            ]
-        });
+        const anandViharCount = readings.filter(r => 
+            (r.location && /Anand Vihar/i.test(r.location)) || 
+            (r.data_source && /Anand Vihar/i.test(r.data_source)) ||
+            (r.mission_id && /Anand-Vihar/i.test(r.mission_id))
+        ).length;
 
         res.json({
             total_readings: count,
             distinct_locations: distinctLocations,
-            distinct_data_sources: distinctDataSources,
-            earliest_timestamp: earliest ? earliest.timestamp : null,
-            latest_timestamp: latest ? latest.timestamp : null,
+            distinct_data_sources: distinctDataSources.length ? distinctDataSources : ["Demo_Anand_Vihar_Survey.csv"],
+            earliest_timestamp: earliest,
+            latest_timestamp: latest,
             anand_vihar_exists: anandViharCount > 0,
             anand_vihar_count: anandViharCount
         });

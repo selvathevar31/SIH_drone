@@ -3,6 +3,7 @@ const { detectHotspotsForReadings } = require('../services/hotspotDetector');
 const Mission = require('../models/Mission');
 const Reading = require('../models/Reading');
 const Hotspot = require('../models/Hotspot');
+const dataStore = require('../services/dataStore');
 const { broadcastTelemetry } = require('../socket');
 
 exports.uploadCsv = async (req, res) => {
@@ -23,7 +24,7 @@ exports.uploadCsv = async (req, res) => {
     }
     
     // Ensure mission exists
-    let mission = await Mission.findOne({ mission_id: missionId });
+    let mission = await dataStore.findMission(missionId);
     if (!mission) {
         mission = new Mission({
             mission_id: missionId,
@@ -31,7 +32,7 @@ exports.uploadCsv = async (req, res) => {
             status: "COMPLETED",
             start_time: new Date()
         });
-        await mission.save();
+        await dataStore.saveMission(mission);
     }
     
     console.log(`[DEBUG UPLOAD] Filename: ${req.file.originalname}`);
@@ -39,8 +40,8 @@ exports.uploadCsv = async (req, res) => {
     console.log(`[DEBUG UPLOAD] Parsed row count: ${result.accepted_rows}`);
     
     // Save readings
-    const inserted = await Reading.insertMany(result.readings);
-    console.log(`[DEBUG UPLOAD] MongoDB inserted document count: ${inserted.length}`);
+    const inserted = await dataStore.insertReadings(result.readings);
+    console.log(`[DEBUG UPLOAD] Inserted readings count: ${inserted.length}`);
     if (inserted.length > 0) {
         console.log(`[DEBUG UPLOAD] First imported document: ${JSON.stringify(inserted[0])}`);
     }
@@ -77,7 +78,7 @@ exports.uploadCsv = async (req, res) => {
         mission.duration_seconds = durationSeconds;
         mission.distance_km = Math.round(distanceKm * 100) / 100;
         mission.total_readings = result.readings.length;
-        await mission.save();
+        await dataStore.saveMission(mission);
     }
     
     // Calculate hotspots
@@ -87,7 +88,7 @@ exports.uploadCsv = async (req, res) => {
             ...h,
             mission_id: missionId
         }));
-        await Hotspot.insertMany(hDocs);
+        await dataStore.insertHotspots(hDocs);
     }
     
     // Broadcast GeoJSON payload to connected WebSockets
@@ -120,5 +121,75 @@ exports.uploadCsv = async (req, res) => {
         readings_processed: result.accepted_rows,
         hotspots_detected: hotspots.length,
         message: "CSV imported successfully"
+    });
+};
+
+exports.loadDemoCsv = async (req, res) => {
+    const missionId = `SIM-Anand-Vihar-${Date.now().toString().slice(-6)}`;
+    const baseLat = 28.6469;
+    const baseLon = 77.3160;
+    const startTime = new Date(Date.now() - 120 * 60 * 1000); // 2 hours ago
+
+    const rows = [
+        "timestamp,latitude,longitude,altitude,pm25,pm10,temperature,humidity,speed,heading,battery,satellites"
+    ];
+
+    const numPoints = 120;
+    for (let i = 0; i < numPoints; i++) {
+        const pointTime = new Date(startTime.getTime() + i * 60 * 1000).toISOString();
+        // Lawnmower grid pattern
+        const lat = baseLat + Math.sin(i * 0.15) * 0.008;
+        const lon = baseLon + (i * 0.00015);
+        const alt = 45 + Math.sin(i * 0.1) * 15;
+        
+        // Hotspot peak around middle points
+        const distFromCenter = Math.abs(i - 60);
+        let pm25 = 45 + Math.random() * 10;
+        if (distFromCenter < 25) {
+            pm25 += (25 - distFromCenter) * 5.5 + Math.random() * 15; // peak ~ 180+
+        }
+        const pm10 = pm25 * 1.65 + Math.random() * 8;
+        const temp = 28.5 + Math.sin(i * 0.05) * 2;
+        const hum = 65 - Math.sin(i * 0.05) * 5;
+        const speed = 4.5 + Math.random() * 1.5;
+        const heading = (i * 15) % 360;
+        const battery = Math.max(20, 100 - (i * 0.6));
+
+        rows.push(`${pointTime},${lat.toFixed(6)},${lon.toFixed(6)},${alt.toFixed(1)},${pm25.toFixed(1)},${pm10.toFixed(1)},${temp.toFixed(1)},${hum.toFixed(1)},${speed.toFixed(1)},${heading},${battery.toFixed(0)},14`);
+    }
+
+    const csvContent = rows.join("\n");
+    const result = await processCsvUpload(csvContent, missionId, "Demo_Anand_Vihar_Survey.csv");
+
+    if (!result.success) {
+        return res.status(400).json(result);
+    }
+
+    let mission = new Mission({
+        mission_id: missionId,
+        data_source: "Demo_Anand_Vihar_Survey.csv",
+        status: "COMPLETED",
+        start_time: startTime,
+        end_time: new Date(startTime.getTime() + numPoints * 60 * 1000),
+        total_readings: result.readings.length,
+        duration_seconds: numPoints * 60,
+        distance_km: 2.85
+    });
+    await dataStore.saveMission(mission);
+
+    await dataStore.insertReadings(result.readings);
+
+    const hotspots = detectHotspotsForReadings(result.readings);
+    if (hotspots && hotspots.length > 0) {
+        const hDocs = hotspots.map(h => ({ ...h, mission_id: missionId }));
+        await dataStore.insertHotspots(hDocs);
+    }
+
+    res.json({
+        success: true,
+        mission_id: missionId,
+        rows_processed: result.accepted_rows,
+        hotspots_detected: hotspots ? hotspots.length : 0,
+        message: "Demo mission CSV loaded successfully"
     });
 };

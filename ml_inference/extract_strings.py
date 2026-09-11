@@ -1,4 +1,5 @@
 import re
+import os
 
 def extract_features(filepath):
     try:
@@ -8,8 +9,8 @@ def extract_features(filepath):
         # In a joblib/pickle file from sklearn, feature names are often saved as strings
         # looking like: \x0bAQI_change_1h
         # Let's extract all printable strings longer than 3 chars
-        strings = re.findall(b'[A-Za-z0-9_().% \-]{4,}', data)
-        strings = [s.decode('utf-8') for s in strings]
+        strings = re.findall(rb'[A-Za-z0-9_().% \-]{4,}', data)
+        strings = [s.decode('utf-8', errors='ignore') for s in strings]
         
         # Filter strings that look like our features
         feature_candidates = []
@@ -32,4 +33,6 @@ def extract_features(filepath):
     except Exception as e:
         print("Error:", str(e))
 
-extract_features('c:\\projects\\drone\\ml_inference\\fluxx_aqi_6h_weighted_hgb.joblib')
+model_path = os.path.join(os.path.dirname(__file__), 'fluxx_aqi_6h_weighted_hgb.joblib')
+if os.path.exists(model_path):
+    extract_features(model_path)

@@ -1,7 +1,8 @@
 const Mission = require('../models/Mission');
 const Reading = require('../models/Reading');
 const Hotspot = require('../models/Hotspot');
-const { compareMissionsData } = require('./comparison'); // Will create next
+const dataStore = require('./dataStore');
+const { compareMissionsData } = require('./comparison');
 
 function detectIntent(question) {
     const q = question.toLowerCase().trim();
@@ -54,10 +55,10 @@ function detectIntent(question) {
     return "unsupported";
 }
 
-async function queryAiIntelligence(missionId, question, extracted = {}) {
+async function queryAiIntelligence(missionId, question) {
     const timestampStr = new Date().toISOString();
     
-    const mission = await Mission.findOne({ mission_id: missionId });
+    const mission = await dataStore.findMission(missionId);
     if (!mission) {
         return {
             query_type: "unsupported",
@@ -75,10 +76,11 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
     const startTimeStr = mission.start_time ? new Date(mission.start_time).toLocaleTimeString('en-US', {hour12: false}) : "N/A";
     const endTimeStr = mission.end_time ? new Date(mission.end_time).toLocaleTimeString('en-US', {hour12: false}) : "N/A";
     
-    const dataSourceGrounded = `FLUXX Mission ${missionId} (${sourceType}, ${mission.total_readings} points, ${startTimeStr} - ${endTimeStr})`;
+    const readings = await dataStore.findReadings({ mission_id: missionId });
+    const hotspots = await dataStore.findHotspots({ mission_id: missionId });
+    const dataSourceGrounded = `FLUXX Mission ${missionId} (${sourceType}, ${readings.length} points, ${startTimeStr} - ${endTimeStr})`;
 
-    const readingsCount = await Reading.countDocuments({ mission_id: missionId });
-    if (readingsCount === 0) {
+    if (readings.length === 0) {
         return {
             query_type: "unsupported",
             answer: "This mission does not have any sensor readings recorded yet.",
@@ -91,70 +93,9 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
         };
     }
 
-    // Resolve Location Bounds if location is provided
-    let locationBounds = null;
-    let locationName = extracted.location;
-    if (locationName) {
-        const ln = locationName.toLowerCase();
-        if (ln.includes("anand vihar")) {
-            locationBounds = { minLat: 28.63, maxLat: 28.67, minLon: 77.29, maxLon: 77.33 };
-        } else if (ln.includes("delhi")) {
-            locationBounds = { minLat: 28.4, maxLat: 28.9, minLon: 76.8, maxLon: 77.5 };
-        } else {
-            // Default arbitrary bounds if unknown but location was asked
-            locationBounds = { minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
-        }
-    }
-
-    // Build Match Criteria based on Location
-    let matchCriteria = { mission_id: missionId };
-    if (locationBounds) {
-        matchCriteria.latitude = { $gte: locationBounds.minLat, $lte: locationBounds.maxLat };
-        matchCriteria.longitude = { $gte: locationBounds.minLon, $lte: locationBounds.maxLon };
-    }
-
-    // Pre-check if any readings exist for this location
-    if (locationBounds) {
-        const locReadingsCount = await Reading.countDocuments(matchCriteria);
-        if (locReadingsCount === 0) {
-            const metricStr = extracted.metric || 'AQI';
-            return {
-                query_type: "no_data_for_location",
-                answer: `I couldn't find ${metricStr} readings for ${locationName} in the available mission data.`,
-                confidence: "high",
-                data_source: dataSourceGrounded,
-                mission_id: missionId,
-                supporting_values: {},
-                locations: [],
-                timestamp: timestampStr
-            };
-        }
-    }
-
-    // Ensure we have an intent
-    const intent = extracted.intent || detectIntent(question);
+    const intent = detectIntent(question);
 
     if (intent === "unsupported") {
-        // If the intent is unsupported but we have a metric and location/bounds, we can just return the average/latest for that metric
-        if (extracted.metric && locationBounds) {
-            const m = extracted.metric.toLowerCase().replace('.', '');
-            if (['aqi', 'pm25', 'pm10', 'temperature', 'humidity'].includes(m)) {
-                const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, [m]: { $ne: null } } }, { $group: { _id: null, avg: { $avg: `$${m}` } } }]);
-                if (aggr.length > 0 && aggr[0].avg !== null) {
-                    return {
-                        query_type: `lookup_${m}`,
-                        answer: `The current ${extracted.metric} recorded for ${locationName} is ${aggr[0].avg.toFixed(1)}.`,
-                        confidence: "high",
-                        data_source: dataSourceGrounded,
-                        mission_id: missionId,
-                        supporting_values: { metric: extracted.metric, value: aggr[0].avg, location: locationName },
-                        locations: [],
-                        timestamp: timestampStr
-                    };
-                }
-            }
-        }
-        
         return {
             query_type: "unsupported",
             answer: "I can currently answer questions about pollution levels, hotspots, mission statistics, trends, altitude and historical comparisons.",
@@ -173,7 +114,8 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
     let confidence = "high";
 
     if (intent === "highest_pm25") {
-        const r = await Reading.findOne({ ...matchCriteria, pm25: { $ne: null } }).sort({ pm25: -1 });
+        const pmReadings = readings.filter(r => r.pm25 != null);
+        const r = pmReadings.length > 0 ? [...pmReadings].sort((a, b) => b.pm25 - a.pm25)[0] : null;
         if (r) {
             ans = `The highest PM2.5 concentration was ${r.pm25.toFixed(1)} µg/m³.`;
             supporting = { pm25: r.pm25, aqi: r.aqi, latitude: r.latitude, longitude: r.longitude };
@@ -183,7 +125,8 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "highest_pm10") {
-        const r = await Reading.findOne({ ...matchCriteria, pm10: { $ne: null } }).sort({ pm10: -1 });
+        const pmReadings = readings.filter(r => r.pm10 != null);
+        const r = pmReadings.length > 0 ? [...pmReadings].sort((a, b) => b.pm10 - a.pm10)[0] : null;
         if (r) {
             ans = `The highest PM10 concentration was ${r.pm10.toFixed(1)} µg/m³.`;
             supporting = { pm10: r.pm10, aqi: r.aqi, latitude: r.latitude, longitude: r.longitude };
@@ -193,9 +136,10 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "highest_aqi") {
-        const r = await Reading.findOne({ ...matchCriteria, aqi: { $ne: null } }).sort({ aqi: -1 });
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        const r = aqiReadings.length > 0 ? [...aqiReadings].sort((a, b) => b.aqi - a.aqi)[0] : null;
         if (r) {
-            ans = `The highest AQI was ${r.aqi} (${r.aqi_category}) detected near ${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}.`;
+            ans = `The highest AQI was ${r.aqi} (${r.aqi_category || 'UNHEALTHY'}) detected near ${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}.`;
             supporting = { aqi: r.aqi, pm25: r.pm25, pm10: r.pm10, latitude: r.latitude, longitude: r.longitude };
             locations = [{ latitude: r.latitude, longitude: r.longitude }];
         } else {
@@ -203,58 +147,67 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "average_pm25") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, pm25: { $ne: null } } }, { $group: { _id: null, avg: { $avg: "$pm25" } } }]);
-        if (aggr.length > 0 && aggr[0].avg !== null) {
-            ans = `The average PM2.5 concentration was ${aggr[0].avg.toFixed(1)} µg/m³.`;
-            supporting = { average_pm25: Number(aggr[0].avg.toFixed(2)) };
+        const pmReadings = readings.filter(r => r.pm25 != null);
+        if (pmReadings.length > 0) {
+            const avg = pmReadings.reduce((s, r) => s + r.pm25, 0) / pmReadings.length;
+            ans = `The average PM2.5 concentration was ${avg.toFixed(1)} µg/m³.`;
+            supporting = { average_pm25: Number(avg.toFixed(2)) };
         } else {
             ans = "No PM2.5 data available to calculate average.";
             confidence = "medium";
         }
     } else if (intent === "average_pm10") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, pm10: { $ne: null } } }, { $group: { _id: null, avg: { $avg: "$pm10" } } }]);
-        if (aggr.length > 0 && aggr[0].avg !== null) {
-            ans = `The average PM10 concentration was ${aggr[0].avg.toFixed(1)} µg/m³.`;
-            supporting = { average_pm10: Number(aggr[0].avg.toFixed(2)) };
+        const pmReadings = readings.filter(r => r.pm10 != null);
+        if (pmReadings.length > 0) {
+            const avg = pmReadings.reduce((s, r) => s + r.pm10, 0) / pmReadings.length;
+            ans = `The average PM10 concentration was ${avg.toFixed(1)} µg/m³.`;
+            supporting = { average_pm10: Number(avg.toFixed(2)) };
         } else {
             ans = "No PM10 data available to calculate average.";
             confidence = "medium";
         }
     } else if (intent === "average_aqi") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, aqi: { $ne: null } } }, { $group: { _id: null, avg: { $avg: "$aqi" } } }]);
-        if (aggr.length > 0 && aggr[0].avg !== null) {
-            ans = `The average AQI was ${aggr[0].avg.toFixed(1)}.`;
-            supporting = { average_aqi: Number(aggr[0].avg.toFixed(2)) };
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        if (aqiReadings.length > 0) {
+            const avg = aqiReadings.reduce((s, r) => s + r.aqi, 0) / aqiReadings.length;
+            ans = `The average AQI was ${avg.toFixed(1)}.`;
+            supporting = { average_aqi: Number(avg.toFixed(2)) };
         } else {
             ans = "No AQI data available to calculate average.";
             confidence = "medium";
         }
     } else if (intent === "min_max_temp") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, temperature: { $ne: null } } }, { $group: { _id: null, min: { $min: "$temperature" }, max: { $max: "$temperature" } } }]);
-        if (aggr.length > 0 && aggr[0].min !== null) {
-            ans = `The temperature ranged from ${aggr[0].min.toFixed(1)}°C to ${aggr[0].max.toFixed(1)}°C.`;
-            supporting = { min_temperature: aggr[0].min, max_temperature: aggr[0].max };
+        const tempReadings = readings.filter(r => r.temperature != null);
+        if (tempReadings.length > 0) {
+            const temps = tempReadings.map(r => r.temperature);
+            const min = Math.min(...temps);
+            const max = Math.max(...temps);
+            ans = `The temperature ranged from ${min.toFixed(1)}°C to ${max.toFixed(1)}°C.`;
+            supporting = { min_temperature: min, max_temperature: max };
         } else {
             ans = "No temperature records found for this mission.";
             confidence = "medium";
         }
     } else if (intent === "min_max_hum") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, humidity: { $ne: null } } }, { $group: { _id: null, min: { $min: "$humidity" }, max: { $max: "$humidity" } } }]);
-        if (aggr.length > 0 && aggr[0].min !== null) {
-            ans = `The humidity ranged from ${aggr[0].min.toFixed(1)}% to ${aggr[0].max.toFixed(1)}%.`;
-            supporting = { min_humidity: aggr[0].min, max_humidity: aggr[0].max };
+        const humReadings = readings.filter(r => r.humidity != null);
+        if (humReadings.length > 0) {
+            const hums = humReadings.map(r => r.humidity);
+            const min = Math.min(...hums);
+            const max = Math.max(...hums);
+            ans = `The humidity ranged from ${min.toFixed(1)}% to ${max.toFixed(1)}%.`;
+            supporting = { min_humidity: min, max_humidity: max };
         } else {
             ans = "No humidity records found for this mission.";
             confidence = "medium";
         }
     } else if (intent === "hotspot_count") {
-        const count = await Hotspot.countDocuments({ mission_id: missionId });
+        const count = hotspots.length;
         ans = `There were ${count} pollution hotspots identified during this mission.`;
         supporting = { hotspot_count: count };
     } else if (intent === "highest_hotspot") {
-        const h = await Hotspot.findOne({ mission_id: missionId }).sort({ peak_aqi: -1 });
+        const h = hotspots.length > 0 ? [...hotspots].sort((a, b) => (b.peak_aqi || 0) - (a.peak_aqi || 0))[0] : null;
         if (h) {
-            ans = `The highest hotspot had a peak AQI of ${h.peak_aqi} (Severity: ${h.severity}) located at ${h.latitude.toFixed(5)}, ${h.longitude.toFixed(5)}.`;
+            ans = `The highest hotspot had a peak AQI of ${h.peak_aqi} (Severity: ${h.severity || 'HIGH'}) located at ${h.latitude.toFixed(5)}, ${h.longitude.toFixed(5)}.`;
             supporting = { peak_aqi: h.peak_aqi, average_aqi: h.average_aqi, latitude: h.latitude, longitude: h.longitude };
             locations = [{ latitude: h.latitude, longitude: h.longitude }];
         } else {
@@ -262,8 +215,8 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "pollution_trend") {
-        const readings = await Reading.find({ ...matchCriteria, pm25: { $ne: null } }).sort({ timestamp: 1 }).select('pm25');
-        const pm25_vals = readings.map(r => r.pm25);
+        const pmReadings = readings.filter(r => r.pm25 != null);
+        const pm25_vals = pmReadings.map(r => r.pm25);
         if (pm25_vals.length >= 10) {
             const chunkSize = Math.max(1, Math.floor(pm25_vals.length / 10));
             const firstChunk = pm25_vals.slice(0, chunkSize);
@@ -284,22 +237,21 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "mission_summary") {
-        const aggr = await Reading.aggregate([{ $match: { ...matchCriteria, aqi: { $ne: null } } }, { $group: { _id: null, avg: { $avg: "$aqi" } } }]);
-        const avg_aqi = aggr.length > 0 && aggr[0].avg !== null ? aggr[0].avg : 0.0;
-        const hCount = await Hotspot.countDocuments({ mission_id: missionId });
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        const avg_aqi = aqiReadings.length > 0 ? (aqiReadings.reduce((s, r) => s + r.aqi, 0) / aqiReadings.length) : 0;
+        const hCount = hotspots.length;
         
-        ans = `Mission ${missionId} (${mission.status}) captured ${mission.total_readings} points over ${mission.distance_km.toFixed(2)} km. Average AQI was ${avg_aqi.toFixed(1)} with ${hCount} hotspots detected.`;
-        supporting = { total_readings: mission.total_readings, distance_km: mission.distance_km, average_aqi: Number(avg_aqi.toFixed(2)), hotspot_count: hCount };
+        ans = `Mission ${missionId} (${mission.status}) captured ${readings.length} points over ${(mission.distance_km || 0).toFixed(2)} km. Average AQI was ${avg_aqi.toFixed(1)} with ${hCount} hotspots detected.`;
+        supporting = { total_readings: readings.length, distance_km: mission.distance_km || 0, average_aqi: Number(avg_aqi.toFixed(2)), hotspot_count: hCount };
     } else if (intent === "mission_comparison") {
-        const prevM = await Mission.findOne({ created_at: { $lt: mission.created_at } }).sort({ created_at: -1 });
+        const allMissions = await dataStore.findMissions();
+        const prevM = allMissions.find(m => m.mission_id !== missionId);
         if (prevM) {
-            const cReadings = await Reading.find({ mission_id: missionId });
-            const pReadings = await Reading.find({ mission_id: prevM.mission_id });
-            const cHotspots = await Hotspot.find({ mission_id: missionId });
-            const pHotspots = await Hotspot.find({ mission_id: prevM.mission_id });
+            const prevReadings = await dataStore.findReadings({ mission_id: prevM.mission_id });
+            const prevHotspots = await dataStore.findHotspots({ mission_id: prevM.mission_id });
             
             if (compareMissionsData) {
-                const comp = compareMissionsData(mission, prevM, cReadings, pReadings, cHotspots, pHotspots);
+                const comp = compareMissionsData(mission, prevM, readings, prevReadings, hotspots, prevHotspots);
                 const dirVerb = comp.summary.overall_direction === "WORSENED" ? "increased" : comp.summary.overall_direction === "IMPROVED" ? "decreased" : "remained stable";
                 const changePct = comp.summary.aqi_change_percent || 0.0;
                 ans = `Compared to the previous survey (${prevM.mission_id}), pollution overall ${dirVerb} (AQI changed by ${changePct.toFixed(1)}%). Current average AQI is ${comp.overall.aqi.current_average.toFixed(1)} vs previous ${comp.overall.aqi.previous_average.toFixed(1)}.`;
@@ -317,32 +269,41 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "pollution_by_altitude") {
-        // approximate bucketing
-        const aggr = await Reading.aggregate([
-            { $match: { ...matchCriteria, altitude: { $ne: null } } },
-            { $project: { bucket: { $multiply: [ { $floor: { $divide: ["$altitude", 10] } }, 10 ] }, pm25: 1, aqi: 1 } },
-            { $group: { _id: "$bucket", avg_pm25: { $avg: "$pm25" }, avg_aqi: { $avg: "$aqi" }, count: { $sum: 1 } } },
-            { $sort: { avg_pm25: -1 } },
-            { $limit: 1 }
-        ]);
-        if (aggr.length > 0) {
-            const worst = aggr[0];
-            ans = `The highest PM2.5 concentration occurred between ${worst._id}m and ${worst._id + 10}m with an average PM2.5 of ${worst.avg_pm25.toFixed(1)} µg/m³.`;
-            supporting = { worst_altitude_min: worst._id, worst_altitude_max: worst._id + 10, average_pm25: Number(worst.avg_pm25.toFixed(2)), average_aqi: Number((worst.avg_aqi||0).toFixed(1)), samples_at_altitude: worst.count };
+        const altMap = {};
+        readings.forEach(r => {
+            if (r.altitude != null && r.pm25 != null) {
+                const bucket = Math.floor(r.altitude / 10) * 10;
+                if (!altMap[bucket]) altMap[bucket] = { pmSum: 0, aqiSum: 0, count: 0 };
+                altMap[bucket].pmSum += r.pm25;
+                altMap[bucket].aqiSum += (r.aqi || 0);
+                altMap[bucket].count += 1;
+            }
+        });
+        const buckets = Object.entries(altMap).map(([b, v]) => ({
+            bucket: Number(b),
+            avg_pm25: v.pmSum / v.count,
+            avg_aqi: v.aqiSum / v.count,
+            count: v.count
+        })).sort((a, b) => b.avg_pm25 - a.avg_pm25);
+
+        if (buckets.length > 0) {
+            const worst = buckets[0];
+            ans = `The highest PM2.5 concentration occurred between ${worst.bucket}m and ${worst.bucket + 10}m with an average PM2.5 of ${worst.avg_pm25.toFixed(1)} µg/m³.`;
+            supporting = { worst_altitude_min: worst.bucket, worst_altitude_max: worst.bucket + 10, average_pm25: Number(worst.avg_pm25.toFixed(2)), average_aqi: Number(worst.avg_aqi.toFixed(1)), samples_at_altitude: worst.count };
         } else {
             ans = "No altitude readings found to calculate vertical pollution profile.";
             confidence = "medium";
         }
     } else if (intent === "pollution_by_time_period") {
-        const readings = await Reading.find({ ...matchCriteria, aqi: { $ne: null } }).sort({ timestamp: 1 }).select('timestamp aqi');
-        if (readings.length >= 4) {
-            const chunkSize = Math.floor(readings.length / 4);
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        if (aqiReadings.length >= 4) {
+            const chunkSize = Math.floor(aqiReadings.length / 4);
             const quarters = [];
             for (let i = 0; i < 4; i++) {
-                const chunk = readings.slice(i * chunkSize, (i + 1) * chunkSize);
+                const chunk = aqiReadings.slice(i * chunkSize, (i + 1) * chunkSize);
                 const avgAqi = chunk.reduce((sum, r) => sum + r.aqi, 0) / chunk.length;
-                const startT = chunk[0].timestamp.toLocaleTimeString('en-US', {hour12: false});
-                const endT = chunk[chunk.length - 1].timestamp.toLocaleTimeString('en-US', {hour12: false});
+                const startT = new Date(chunk[0].timestamp).toLocaleTimeString('en-US', {hour12: false});
+                const endT = new Date(chunk[chunk.length - 1].timestamp).toLocaleTimeString('en-US', {hour12: false});
                 quarters.push({ period: `Period ${i+1} (${startT} - ${endT})`, avg_aqi: avgAqi });
             }
             const worst = quarters.reduce((a, b) => a.avg_aqi > b.avg_aqi ? a : b);
@@ -353,10 +314,10 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "worst_pollution_period") {
-        const readings = await Reading.find({ ...matchCriteria, aqi: { $ne: null } }).sort({ timestamp: 1 }).select('timestamp aqi pm25');
-        if (readings.length >= 10) {
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        if (aqiReadings.length >= 10) {
             const windows = {};
-            for (const r of readings) {
+            for (const r of aqiReadings) {
                 const t = new Date(r.timestamp);
                 const minuteBucket = Math.floor(t.getMinutes() / 5) * 5;
                 t.setMinutes(minuteBucket, 0, 0);
@@ -386,9 +347,10 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
             confidence = "medium";
         }
     } else if (intent === "cleanest_surveyed_area") {
-        const r = await Reading.findOne({ ...matchCriteria, aqi: { $ne: null } }).sort({ aqi: 1 });
+        const aqiReadings = readings.filter(r => r.aqi != null);
+        const r = aqiReadings.length > 0 ? [...aqiReadings].sort((a, b) => a.aqi - b.aqi)[0] : null;
         if (r) {
-            ans = `The cleanest surveyed area was detected at ${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)} with an AQI of ${r.aqi} (${r.aqi_category}).`;
+            ans = `The cleanest surveyed area was detected at ${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)} with an AQI of ${r.aqi} (${r.aqi_category || 'GOOD'}).`;
             supporting = { aqi: r.aqi, pm25: r.pm25, pm10: r.pm10, latitude: r.latitude, longitude: r.longitude };
             locations = [{ latitude: r.latitude, longitude: r.longitude }];
         } else {
@@ -412,10 +374,13 @@ async function queryAiIntelligence(missionId, question, extracted = {}) {
 async function getMissionInsights(missionId) {
     const insights = [];
 
+    const readings = await dataStore.findReadings({ mission_id: missionId });
+    const hotspots = await dataStore.findHotspots({ mission_id: missionId });
+
     // 1. Pollution Trend
     let trendInsight = "No PM2.5 timeline data to analyze trend.";
-    const readings = await Reading.find({ mission_id: missionId, pm25: { $ne: null } }).sort({ timestamp: 1 }).select('pm25');
-    const pm25Vals = readings.map(r => r.pm25);
+    const pmReadings = readings.filter(r => r.pm25 != null);
+    const pm25Vals = pmReadings.map(r => r.pm25);
     
     if (pm25Vals.length >= 10) {
         const chunkSize = Math.max(1, Math.floor(pm25Vals.length / 10));
@@ -435,7 +400,7 @@ async function getMissionInsights(missionId) {
     insights.push({ title: "Pollution Trend", description: trendInsight });
 
     // 2. Highest Concentration
-    const maxR = await Reading.findOne({ mission_id: missionId, pm25: { $ne: null } }).sort({ pm25: -1 });
+    const maxR = pmReadings.length > 0 ? [...pmReadings].sort((a, b) => b.pm25 - a.pm25)[0] : null;
     let highestInsight = "No PM2.5 peak detected.";
     if (maxR) {
         highestInsight = `${maxR.pm25.toFixed(1)} µg/m³ detected near ${maxR.latitude.toFixed(5)}, ${maxR.longitude.toFixed(5)}.`;
@@ -443,22 +408,25 @@ async function getMissionInsights(missionId) {
     insights.push({ title: "Highest Concentration", description: highestInsight });
 
     // 3. Hotspots
-    const hCount = await Hotspot.countDocuments({ mission_id: missionId });
-    insights.push({ title: "Hotspots", description: `${hCount} pollution hotspots identified.` });
+    insights.push({ title: "Hotspots", description: `${hotspots.length} pollution hotspots identified.` });
 
     // 4. Altitude
-    const aggr = await Reading.aggregate([
-        { $match: { mission_id: missionId, altitude: { $ne: null } } },
-        { $project: { bucket: { $multiply: [ { $floor: { $divide: ["$altitude", 10] } }, 10 ] }, pm25: 1 } },
-        { $group: { _id: "$bucket", avg_pm25: { $avg: "$pm25" } } },
-        { $sort: { avg_pm25: -1 } },
-        { $limit: 1 }
-    ]);
-    
+    const altMap = {};
+    readings.forEach(r => {
+        if (r.altitude != null && r.pm25 != null) {
+            const bucket = Math.floor(r.altitude / 10) * 10;
+            if (!altMap[bucket]) altMap[bucket] = { sum: 0, count: 0 };
+            altMap[bucket].sum += r.pm25;
+            altMap[bucket].count += 1;
+        }
+    });
+    const altBuckets = Object.entries(altMap).map(([b, v]) => ({ bucket: Number(b), avg: v.sum / v.count }));
+    altBuckets.sort((a, b) => b.avg - a.avg);
+
     let altitudeInsight = "No altitude data available to determine vertical concentration.";
-    if (aggr.length > 0) {
-        const worstBucket = aggr[0];
-        altitudeInsight = `Highest PM2.5 concentration occurred between ${worstBucket._id}–${worstBucket._id + 10} m.`;
+    if (altBuckets.length > 0) {
+        const worstBucket = altBuckets[0];
+        altitudeInsight = `Highest PM2.5 concentration occurred between ${worstBucket.bucket}–${worstBucket.bucket + 10} m.`;
     }
     insights.push({ title: "Altitude", description: altitudeInsight });
 

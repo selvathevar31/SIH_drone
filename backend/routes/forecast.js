@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Reading = require('../models/Reading');
+const dataStore = require('../services/dataStore');
 const asyncHandler = require('../middlewares/asyncHandler');
 
 // Centralized Geofence for Anand Vihar
@@ -28,16 +29,30 @@ const anandViharQuery = {
 };
 
 router.get('/anand-vihar', asyncHandler(async (req, res) => {
-    // 1. Fetch recent readings using geospatial bounding box
-    // To ensure we get the most recent data but order it chronologically,
-    // we query descending by timestamp first, then reverse in memory.
-    // 500 readings is typically enough to cover a 12+ hour period for a single drone mission.
-    const recentReadingsDesc = await Reading.find(anandViharQuery)
-        .sort({ timestamp: -1 })
-        .limit(500)
-        .lean();
+    let chronologicalReadings = [];
 
-    if (recentReadingsDesc.length === 0) {
+    if (dataStore.isMongoConnected()) {
+        const recentReadingsDesc = await Reading.find(anandViharQuery)
+            .sort({ timestamp: -1 })
+            .limit(500)
+            .lean();
+
+        if (recentReadingsDesc.length > 0) {
+            chronologicalReadings = recentReadingsDesc.reverse();
+        }
+    } else {
+        const minLat = ANAND_VIHAR.center.lat - latDelta;
+        const maxLat = ANAND_VIHAR.center.lat + latDelta;
+        const minLon = ANAND_VIHAR.center.lon - lonDelta;
+        const maxLon = ANAND_VIHAR.center.lon + lonDelta;
+
+        chronologicalReadings = dataStore.memoryStore.readings
+            .filter(r => r.latitude >= minLat && r.latitude <= maxLat && r.longitude >= minLon && r.longitude <= maxLon)
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            .slice(-500);
+    }
+
+    if (chronologicalReadings.length === 0) {
         return res.json({
             diagnostic: true,
             status: "NO_DATA",
@@ -48,14 +63,10 @@ router.get('/anand-vihar', asyncHandler(async (req, res) => {
         });
     }
 
-    // 2. Order matching readings chronologically by timestamp
-    const chronologicalReadings = recentReadingsDesc.reverse();
-
-    const earliest = chronologicalReadings[0].timestamp;
-    const latest = chronologicalReadings[chronologicalReadings.length - 1].timestamp;
+    const earliest = new Date(chronologicalReadings[0].timestamp);
+    const latest = new Date(chronologicalReadings[chronologicalReadings.length - 1].timestamp);
     const timeSpanHours = (latest.getTime() - earliest.getTime()) / (1000 * 60 * 60);
 
-    // 3. Return a clear diagnostic response (DO NOT call ML model yet)
     return res.json({
         diagnostic: true,
         status: "DATA_FOUND",
@@ -67,7 +78,6 @@ router.get('/anand-vihar', asyncHandler(async (req, res) => {
             latest: latest,
             span_hours: timeSpanHours.toFixed(2)
         },
-        // Provide the first and last as a sanity check
         sample_first: chronologicalReadings[0],
         sample_last: chronologicalReadings[chronologicalReadings.length - 1]
     });

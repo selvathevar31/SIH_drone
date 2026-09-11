@@ -1,15 +1,13 @@
-const Mission = require('../models/Mission');
-const Hotspot = require('../models/Hotspot');
-const Reading = require('../models/Reading');
+const dataStore = require('../services/dataStore');
 
 exports.getSummary = async (req, res) => {
-    const totalMissions = await Mission.countDocuments();
-    const totalHotspots = await Hotspot.countDocuments();
-    const activeMissions = await Mission.countDocuments({ status: { $in: ["IN_FLIGHT", "PLANNED"] } });
+    const missions = await dataStore.findMissions();
+    const hotspots = await dataStore.findHotspots();
+    const activeMissions = missions.filter(m => ["IN_FLIGHT", "PLANNED"].includes(m.status)).length;
     
     res.json({
-        total_missions: totalMissions,
-        total_hotspots: totalHotspots,
+        total_missions: missions.length,
+        total_hotspots: hotspots.length,
         active_missions: activeMissions,
         system_status: "ONLINE"
     });
@@ -27,13 +25,14 @@ exports.getDashboardData = async (req, res) => {
         timeFilter.$lte = new Date(req.query.end_time.replace('Z', '+00:00'));
     }
 
-    const mission = await Mission.findOne({ mission_id });
+    const mission = await dataStore.findMission(mission_id);
     
     if (!mission) {
         // Graceful fallback for empty database
         return res.json({
             mission: { mission_id, status: "OFFLINE", start_time: new Date(), end_time: null },
             mission_stats: { duration_seconds: 0, distance_km: 0, total_readings: 0, average_aqi: 0, peak_aqi: 0 },
+            telemetry: [],
             trend: [],
             flight_path: [],
             current_location: null,
@@ -42,18 +41,12 @@ exports.getDashboardData = async (req, res) => {
         });
     }
 
-    // Build reading filter
-    const readingFilter = { mission_id };
-    if (Object.keys(timeFilter).length > 0) {
-        readingFilter.timestamp = timeFilter;
-    }
-
     // Fetch readings, sorted chronologically
     console.log(`[DEBUG DASHBOARD] Querying telemetry for missionId: ${mission_id}`);
-    const readings = await Reading.find(readingFilter).sort({ timestamp: 1 });
+    const readings = await dataStore.findReadings({ mission_id });
     console.log(`[DEBUG DASHBOARD] Returned telemetry count: ${readings.length}`);
     
-    const hotspots = await Hotspot.find({ mission_id });
+    const hotspots = await dataStore.findHotspots({ mission_id });
 
     // Aggregate stats
     let totalAqi = 0, peakAqi = 0, aqiCount = 0;
@@ -108,6 +101,13 @@ exports.getDashboardData = async (req, res) => {
             hotspot_count: hotspots.length
         },
         telemetry: telemetry,
+        trend: telemetry,
+        flight_path: telemetry.map(p => ({
+            timestamp: p.timestamp,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            altitude: p.altitude
+        })),
         current_location: latestReading ? {
             latitude: latestReading.latitude,
             longitude: latestReading.longitude,
