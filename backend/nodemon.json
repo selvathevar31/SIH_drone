@@ -1,0 +1,7 @@
+{
+  "ignore": [
+    "data/*",
+    ".fluxx_store.json",
+    "*.log"
+  ]
+}

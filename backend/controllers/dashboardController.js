@@ -77,7 +77,11 @@ exports.getDashboardData = async (req, res) => {
             pm10: r.pm10,
             aqi: r.aqi,
             temperature: r.temperature,
-            humidity: r.humidity
+            humidity: r.humidity,
+            no2: r.no2,
+            so2: r.so2,
+            co: r.co,
+            o3: r.o3
         });
     });
 

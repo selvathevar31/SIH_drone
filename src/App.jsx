@@ -213,8 +213,7 @@ function App() {
       setLiveState(liveStateRes);
       setEvents(eventsRes);
       if (isLive && liveStateRes.latest_timestamp) {
-        const diff = Math.floor((new Date() - new Date(liveStateRes.latest_timestamp)) / 1000);
-        setFreshness(diff <= 10 ? 'LIVE' : `STALE (${diff}s ago)`);
+        setFreshness('LIVE');
       } else {
         setFreshness('HISTORICAL');
       }

@@ -131,7 +131,9 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
     const center = {
       longitude: (minLon + maxLon) / 2,
       latitude: (minLat + maxLat) / 2,
-      zoom: 11
+      zoom: 14,
+      pitch: 60,
+      bearing: -15
     };
     return center;
   }, [geojson]);
@@ -164,67 +166,52 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
 
   // ─── Mapbox Layers ──────────────────────────────────────────────────────────
   
-  // The heatmap layer
-  const heatmapLayer = {
-    id: 'pollution-heatmap',
-    type: 'heatmap',
+  const clusterLayer = {
+    id: 'clusters',
+    type: 'circle',
     source: 'pollution',
-    maxzoom: 16,
+    filter: ['has', 'point_count'],
     paint: {
-      'heatmap-weight': [
-        'interpolate', ['linear'], ['get', config.property],
-        0, 0,
-        config.max * 0.2, 0.1,
-        config.max * 0.4, 0.3,
-        config.max * 0.7, 0.6,
-        config.max, 1.5
+      'circle-color': [
+        'interpolate', ['linear'], ['get', 'max_val'],
+        0, '#22C55E',
+        config.max * 0.2, '#84CC16',
+        config.max * 0.4, '#FACC15',
+        config.max * 0.6, '#F97316',
+        config.max * 0.8, '#EF4444',
+        config.max, '#991B1B'
       ],
-      // Intensity scales UP as you zoom IN
-      'heatmap-intensity': [
-        'interpolate', ['linear'], ['zoom'],
-        9, 0.5,
-        12, 1.2,
-        16, 2.5
+      'circle-radius': [
+        'step', ['get', 'point_count'],
+        18, 10,
+        22, 50,
+        28
       ],
-      'heatmap-color': [
-        'interpolate', ['linear'], ['heatmap-density'],
-        0, 'rgba(34, 197, 94, 0)',
-        0.1, '#22C55E', // Low (Green)
-        0.3, '#84CC16', // Moderate (Yellow-Green)
-        0.5, '#FACC15', // Elevated (Yellow)
-        0.7, '#F97316', // High (Orange)
-        0.9, '#EF4444', // Very High (Red)
-        1.0, '#991B1B'  // Critical (Dark Red Core)
-      ],
-      // Radius DECREASES as you zoom IN
-      'heatmap-radius': [
-        'interpolate', ['linear'], ['zoom'],
-        0, 60,
-        9, 60,  // Large smooth influence when zoomed out
-        12, 35, // Starts reducing
-        15, 20, // Tighter cores
-        18, 15  // Very distinct at street level
-      ],
-      'heatmap-opacity': [
-        'interpolate', ['linear'], ['zoom'],
-        7, 0.5,
-        15, 0.8
-      ]
+      'circle-stroke-width': 1,
+      'circle-stroke-color': 'rgba(255, 255, 255, 0.5)'
     }
   };
 
-  // The point layer (secondary evidence)
-  const circleLayer = {
-    id: 'pollution-points',
+  const clusterLabelLayer = {
+    id: 'cluster-count',
+    type: 'symbol',
+    source: 'pollution',
+    filter: ['has', 'point_count'],
+    layout: {
+      'text-field': ['to-string', ['round', ['get', 'max_val']]],
+      'text-size': 12
+    },
+    paint: {
+      'text-color': '#ffffff'
+    }
+  };
+
+  const unclusteredPointLayer = {
+    id: 'unclustered-point',
     type: 'circle',
     source: 'pollution',
-    minzoom: 11,
+    filter: ['!', ['has', 'point_count']],
     paint: {
-      'circle-radius': [
-        'interpolate', ['linear'], ['zoom'],
-        11, 2,
-        16, ['interpolate', ['linear'], ['get', config.property], 0, 4, config.max, 7]
-      ],
       'circle-color': [
         'interpolate', ['linear'], ['get', config.property],
         0, '#22C55E',
@@ -234,15 +221,23 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
         config.max * 0.8, '#EF4444',
         config.max, '#991B1B'
       ],
-      // Points fade in as you zoom in
-      'circle-opacity': [
-        'interpolate', ['linear'], ['zoom'],
-        11, 0,
-        13, 0.4,
-        16, 0.9
-      ],
+      'circle-radius': 14,
       'circle-stroke-width': 1,
-      'circle-stroke-color': 'rgba(255, 255, 255, 0.9)'
+      'circle-stroke-color': 'rgba(255, 255, 255, 0.5)'
+    }
+  };
+
+  const unclusteredLabelLayer = {
+    id: 'unclustered-label',
+    type: 'symbol',
+    source: 'pollution',
+    filter: ['!', ['has', 'point_count']],
+    layout: {
+      'text-field': ['to-string', ['round', ['get', config.property]]],
+      'text-size': 10
+    },
+    paint: {
+      'text-color': '#ffffff'
     }
   };
 
@@ -351,16 +346,45 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
             mapStyle="mapbox://styles/mapbox/dark-v11"
             mapboxAccessToken={MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%', minHeight: '500px', position: 'absolute', top: 0, left: 0 }}
-            interactiveLayerIds={['pollution-points']}
+            interactiveLayerIds={['unclustered-point', 'clusters']}
+            terrain={{ source: 'mapbox-dem', exaggeration: 1.5 }}
             onMouseMove={onHover}
             onMouseLeave={() => onHover({ features: [] })}
             onLoad={onMapLoad}
             onError={onMapError}
           >
-            <Source id="pollution" type="geojson" data={geojson}>
-              <Layer {...heatmapLayer} />
-              <Layer {...circleLayer} />
+            <Source 
+              id="pollution" 
+              type="geojson" 
+              data={geojson}
+              cluster={true}
+              clusterMaxZoom={14}
+              clusterRadius={40}
+              clusterProperties={{
+                max_val: ['max', ['get', config.property]]
+              }}
+            >
+              <Layer {...clusterLayer} />
+              <Layer {...clusterLabelLayer} />
+              <Layer {...unclusteredPointLayer} />
+              <Layer {...unclusteredLabelLayer} />
             </Source>
+            
+            <Source id="mapbox-dem" type="raster-dem" url="mapbox://mapbox.mapbox-terrain-dem-v1" tileSize={512} maxzoom={14} />
+            <Layer 
+              id="3d-buildings" 
+              source="composite" 
+              source-layer="building" 
+              filter={['==', 'extrude', 'true']} 
+              type="fill-extrusion" 
+              minzoom={14} 
+              paint={{
+                'fill-extrusion-color': '#2a2a35',
+                'fill-extrusion-height': ['get', 'height'],
+                'fill-extrusion-base': ['get', 'min_height'],
+                'fill-extrusion-opacity': 0.8
+              }} 
+            />
             <NavigationControl position="bottom-right" />
             
             {hoverInfo && hoverInfo.feature && (

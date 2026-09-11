@@ -47,6 +47,10 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                     if (/^pm\s*[\-_\.]?\s*2[\.\_]?5$/.test(cleanCol)) mappedCol = 'pm25';
                     else if (/^pm\s*[\-_\.]?\s*10(\.0)?$/.test(cleanCol)) mappedCol = 'pm10';
                     else if (/^pm\s*[\-_\.]?\s*1(\.0)?$/.test(cleanCol)) mappedCol = 'pm1';
+                    else if (/^ozone/.test(cleanCol)) mappedCol = 'o3';
+                    else if (/^so2/.test(cleanCol)) mappedCol = 'so2';
+                    else if (/^co\b/.test(cleanCol)) mappedCol = 'co';
+                    else if (/^no[x2]?\b/.test(cleanCol)) mappedCol = 'no2';
                     else if (aliasMap[cleanCol]) mappedCol = aliasMap[cleanCol];
                     else if (/^altitude/.test(cleanCol)) mappedCol = 'altitude';
                     else if (['timestamp', 'latitude', 'longitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength'].includes(cleanCol)) {
@@ -61,17 +65,10 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 console.log(`[CSV PARSER] Original headers:`, originalHeaders);
                 console.log(`[CSV PARSER] Mapped headers:`, headers);
                 
-                const requiredCols = ['timestamp', 'latitude', 'longitude', 'pm25', 'pm10'];
+                const requiredCols = ['timestamp', 'latitude', 'longitude'];
                 missingCols = requiredCols.filter(col => !headers.includes(col));
                 if (missingCols.length > 0) {
-                    let errorMsg = `Missing required columns: ${missingCols.join(', ')}.`;
-                    if (missingCols.includes('pm25')) {
-                        errorMsg += ` Accepted names for pm25: pm25, PM25, pm2.5, PM2.5, pm_25.`;
-                    }
-                    if (missingCols.includes('pm10')) {
-                        errorMsg += ` Accepted names for pm10: pm10, PM10, pm10.0, pm_10.`;
-                    }
-                    missingColsErrorMsg = errorMsg;
+                    missingColsErrorMsg = `Missing required columns: ${missingCols.join(', ')}.`;
                     // Destroy stream to stop processing
                     stream.destroy();
                 }
@@ -139,6 +136,7 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 }
 
                 let pm1 = null, pm25 = null, pm10 = null, temp = null, humid = null, alt = null;
+                let no2 = null, so2 = null, co = null, o3 = null;
 
                 try {
                     if (row['pm1'] && row['pm1'].trim() !== '') {
@@ -202,6 +200,18 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                         const val = parseFloat(row['altitude']);
                         if (!isNaN(val)) alt = val;
                     }
+                    
+                    ['no2', 'so2', 'co', 'o3'].forEach(gas => {
+                        if (row[gas] && row[gas].trim() !== '') {
+                            const val = parseFloat(row[gas]);
+                            if (!isNaN(val) && val >= 0) {
+                                if (gas === 'no2') no2 = val;
+                                if (gas === 'so2') so2 = val;
+                                if (gas === 'co') co = val;
+                                if (gas === 'o3') o3 = val;
+                            }
+                        }
+                    });
 
                 } catch (ex) {
                     errors.push({ row: rowNum, field: "sensor", reason: `Sensor parameters failed type coercion: ${ex.message}` });
@@ -225,6 +235,10 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                     pm1: pm1,
                     pm25: pm25,
                     pm10: pm10,
+                    no2: no2,
+                    so2: so2,
+                    co: co,
+                    o3: o3,
                     temperature: temp,
                     humidity: humid,
                     speed: row['speed'] ? parseFloat(row['speed']) : null,

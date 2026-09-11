@@ -14,6 +14,10 @@ const readingSchema = new mongoose.Schema({
   pm1: { type: Number, default: null },
   pm25: { type: Number, default: null },
   pm10: { type: Number, default: null },
+  no2: { type: Number, default: null },
+  so2: { type: Number, default: null },
+  co: { type: Number, default: null },
+  o3: { type: Number, default: null },
   
   temperature: { type: Number, default: null },
   humidity: { type: Number, default: null },

@@ -107,9 +107,15 @@ export default function Header({
         <div className="h-3 w-px bg-border/60" />
 
         <div className="flex items-center gap-2">
-          <span className="uppercase tracking-widest text-[9px]">Last Updated</span>
-          <span className="text-text-primary font-medium">{lastUpdated || 'N/A'}</span>
-          <span className="ml-1">{getFreshnessBadge()}</span>
+          {lastUpdated ? (
+            <>
+              <span className="uppercase tracking-widest text-[9px]">Last Updated</span>
+              <span className="text-text-primary font-medium">{lastUpdated}</span>
+              <span className="ml-1">{getFreshnessBadge()}</span>
+            </>
+          ) : (
+            <span>{getFreshnessBadge()}</span>
+          )}
         </div>
 
       </div>

@@ -178,15 +178,15 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
                         <strong className="text-text-primary text-xs uppercase tracking-wide">Required:</strong>
                         <ul className="text-xs font-mono mt-1 space-y-1">
                           <li>timestamp</li><li>latitude</li><li>longitude</li>
-                          <li>altitude</li><li>pm25</li><li>pm10</li>
-                          <li>temperature</li><li>humidity</li>
                         </ul>
                       </div>
                       <div>
                         <strong className="text-text-primary text-xs uppercase tracking-wide">Optional:</strong>
                         <ul className="text-xs font-mono mt-1 space-y-1">
-                          <li>speed</li><li>heading</li><li>battery</li>
-                          <li>satellites</li><li>gps_status</li><li>signal_strength</li>
+                          <li>pm25</li><li>pm10</li><li>altitude</li>
+                          <li>temperature</li><li>humidity</li><li>speed</li>
+                          <li>heading</li><li>battery</li><li>satellites</li>
+                          <li>gps_status</li><li>signal_strength</li>
                         </ul>
                       </div>
                     </div>
