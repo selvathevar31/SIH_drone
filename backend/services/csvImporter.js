@@ -44,13 +44,13 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                     const cleanCol = header.replace(/^\uFEFF/, '').toLowerCase().trim();
                     let mappedCol = cleanCol;
                     
-                    if (/^pm\s*[\-_\.]?\s*2[\.\_]?5$/.test(cleanCol)) mappedCol = 'pm25';
-                    else if (/^pm\s*[\-_\.]?\s*10(\.0)?$/.test(cleanCol)) mappedCol = 'pm10';
-                    else if (/^pm\s*[\-_\.]?\s*1(\.0)?$/.test(cleanCol)) mappedCol = 'pm1';
-                    else if (/^ozone/.test(cleanCol)) mappedCol = 'o3';
-                    else if (/^so2/.test(cleanCol)) mappedCol = 'so2';
-                    else if (/^co\b/.test(cleanCol)) mappedCol = 'co';
-                    else if (/^no[x2]?\b/.test(cleanCol)) mappedCol = 'no2';
+                    if (/^pm\s*[\-_\.]?\s*2[\.\_]?5(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'pm25';
+                    else if (/^pm\s*[\-_\.]?\s*10(\.0)?(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'pm10';
+                    else if (/^pm\s*[\-_\.]?\s*1(\.0)?(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'pm1';
+                    else if (/^ozone(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'o3';
+                    else if (/^so2(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'so2';
+                    else if (/^co(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'co';
+                    else if (/^no[x2]?\b(\s*\(.*\))?$/.test(cleanCol)) mappedCol = 'no2';
                     else if (aliasMap[cleanCol]) mappedCol = aliasMap[cleanCol];
                     else if (/^altitude/.test(cleanCol)) mappedCol = 'altitude';
                     else if (['timestamp', 'latitude', 'longitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength', 'mission_id', 'mission', 'missionid'].includes(cleanCol)) {

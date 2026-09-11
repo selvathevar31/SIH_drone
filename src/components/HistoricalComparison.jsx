@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import MissionMap from './MissionMap';
+import Pollution3DSurface from './Pollution3DSurface';
 import { ArrowUpRight, ArrowDownRight, Minus, AlertTriangle } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Label, LineChart, Line, Legend } from 'recharts';
 
@@ -353,28 +353,20 @@ export default function HistoricalComparison({ missions, datasetStore, fetchAndS
 
           {/* Dual Maps */}
           <div className="flex flex-col lg:flex-row gap-6 h-[550px] shrink-0">
-            <div className="flex-1 flex flex-col gap-2 relative">
+            <div className="flex-1 flex flex-col gap-2 relative rounded-xl overflow-hidden border border-border shadow-sm">
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-surface-elevated/90 backdrop-blur border border-telemetry/50 rounded-full px-6 py-1.5 shadow-lg pointer-events-none">
                 <span className="font-bold text-telemetry tracking-widest uppercase text-[10px]">Mission 1 — {new Date(m1Data.dashboardData?.mission?.start_time).toLocaleDateString()}</span>
               </div>
-              <MissionMap 
+              <Pollution3DSurface 
                 missionId={currentMissionId}
-                flightPath={m1Data.telemetry}
-                hotspots={m1Data.dashboardData?.hotspots || []}
-                telemetry={m1Data.dashboardData?.current_environment || []}
-                allDatasets={[]}
               />
             </div>
-            <div className="flex-1 flex flex-col gap-2 relative">
+            <div className="flex-1 flex flex-col gap-2 relative rounded-xl overflow-hidden border border-border shadow-sm">
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-surface-elevated/90 backdrop-blur border border-text-muted/50 rounded-full px-6 py-1.5 shadow-lg pointer-events-none">
                 <span className="font-bold text-text-primary tracking-widest uppercase text-[10px]">Mission 2 — {new Date(m2Data.dashboardData?.mission?.start_time).toLocaleDateString()}</span>
               </div>
-              <MissionMap 
+              <Pollution3DSurface 
                 missionId={previousMissionId}
-                flightPath={m2Data.telemetry}
-                hotspots={m2Data.dashboardData?.hotspots || []}
-                telemetry={m2Data.dashboardData?.current_environment || []}
-                allDatasets={[]}
               />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Map, MapPin, Activity, History, Settings, UploadCloud, X, FileText, Database, GitCompare, Globe, PlayCircle } from 'lucide-react';
+import { LayoutDashboard, Map, MapPin, Activity, History, Settings, UploadCloud, X, FileText, Database, GitCompare, PlayCircle } from 'lucide-react';
 import { uploadCSV, loadDemoCSV } from '../services/api';
 
 const navGroups = [
@@ -21,7 +21,6 @@ const navGroups = [
   {
     title: 'ACCESS',
     items: [
-      { id: 'public', icon: Globe, label: 'Public Portal' },
       { id: 'settings', icon: Settings, label: 'Settings' }
     ]
   }

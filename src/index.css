@@ -41,21 +41,29 @@
   background: #F7F9F8 !important;
 }
 
-/* Custom scrollbar */
+/* Universal floating scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 14px;
+  height: 14px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #FFFFFF;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #DDE5E2;
-  border-radius: 3px;
+  background-color: #DCE5E2;
+  border-radius: 9999px;
+  border: 4px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8C9EA4;
+  background-color: #8C9EA4;
+}
+
+/* Firefox fallback */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #DCE5E2 transparent;
 }
