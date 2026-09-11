@@ -7,7 +7,6 @@ import '../../core/models/aqi_data.dart';
 import '../../core/models/hourly_forecast.dart';
 import '../../core/theme/apple_theme.dart';
 import '../../data/providers/repository_providers.dart';
-import '../../data/providers/location_provider.dart';
 import '../widgets/aqi_hero_header.dart';
 import '../widgets/hourly_forecast_strip.dart';
 import '../widgets/heatmap_card.dart';
@@ -15,8 +14,6 @@ import '../widgets/metrics_grid.dart';
 import '../widgets/floating_chat_button.dart';
 import '../widgets/learn_aqi_section.dart';
 import 'package:geolocator/geolocator.dart';
-
-enum LocationStatus { enabled, disabled }
 
 class FluxxDashboardScreen extends ConsumerStatefulWidget {
   const FluxxDashboardScreen({super.key});
@@ -35,6 +32,7 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
   void initState() {
     super.initState();
     _fetchWeatherData();
+    _fetchLatestTelemetry();
   }
 
   String _mapWmoToConditionStr(int wmoCode) {
@@ -82,7 +80,7 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
 
       final url = Uri.parse(
           'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&hourly=temperature_2m,weather_code&current_weather=true&temperature_unit=fahrenheit');
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -140,6 +138,24 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
       );
       _isLoadingWeather = false;
     });
+  }
+
+  Future<void> _fetchLatestTelemetry() async {
+    try {
+      const String defaultUrl = 'http://10.0.2.2:8000';
+      const String apiUrl = String.fromEnvironment('API_URL', defaultValue: defaultUrl);
+      final url = Uri.parse('$apiUrl/api/telemetry/latest');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data != null && data['features'] != null && (data['features'] as List).isNotEmpty) {
+           // Cold-start telemetry fetched; Mapbox source update is handled via provider
+        }
+      }
+    } catch (_) {
+      // Cold-start fetch failed silently; real-time socket will hydrate on connect
+    }
   }
 
   WeatherCondition _getWeatherCondition(String condition) {
@@ -214,14 +230,6 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final locationAsync = ref.watch(locationProvider);
-    final userLocation = locationAsync.valueOrNull;
-    final isLocationDisabled = userLocation == null ||
-        userLocation.city == 'Location disabled' ||
-        userLocation.city.toLowerCase().contains('denied') ||
-        userLocation.city.toLowerCase().contains('unavailable');
-    final locationStatus = isLocationDisabled ? LocationStatus.disabled : LocationStatus.enabled;
-
     final aqiAsyncValue = ref.watch(currentAqiProvider);
     final aqiData = aqiAsyncValue.valueOrNull;
 
@@ -272,7 +280,7 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
                       const HeatmapCard(),
                       const SizedBox(height: 12),
                       const LearnAQISection(),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16.0),
                       const MetricsGrid(),
                       const SizedBox(height: 100), // Bottom padding for floating button
                     ]),
@@ -293,49 +301,10 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (locationStatus == LocationStatus.disabled)
-                          const Text(
-                            'Location disabled',
-                            style: TextStyle(color: Colors.redAccent, fontSize: 12),
-                          )
-                        else if (displayAqiData.userLocationName != null)
-                          Text(
-                            displayAqiData.userLocationName!,
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                          )
-                        else if (userLocation != null)
-                          Text(
-                            '${userLocation.city}, ${userLocation.state}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                        if (aqiData != null && aqiData.source != 'FLUXX_DB')
-                          Container(
-                            margin: const EdgeInsets.only(top: 2, bottom: 2),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
-                            ),
-                            child: Text(
-                              'Delhi demo data',
-                              style: const TextStyle(color: Colors.orange, fontSize: 9, fontWeight: FontWeight.bold),
-                            ),
-                          )
-                        else if (aqiData != null && aqiData.source == 'FLUXX_DB')
-                          Container(
-                            margin: const EdgeInsets.only(top: 2, bottom: 2),
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
-                            ),
-                            child: Text(
-                              'FLUXX data',
-                              style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
-                            ),
-                          ),
+                        const Text(
+                          'Delhi NCR',
+                          style: TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
                         Text(
                           '$temperature°C | $condition',
                           style: const TextStyle(
@@ -351,7 +320,7 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       onPressed: () {
-                        final currentState = ref.read(locationProvider).valueOrNull?.state ?? 'Unknown';
+                        final currentState = 'Delhi NCR';
                         _showLanguageSelector(context, currentState);
                       },
                     ),

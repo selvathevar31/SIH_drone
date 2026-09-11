@@ -16,7 +16,7 @@ class FluxxTypography {
   FluxxTypography._();
 
   static TextStyle get heroDisplay => GoogleFonts.inter(
-        fontSize: 96,
+        fontSize: 64,
         fontWeight: FontWeight.w200,
         letterSpacing: -2.0,
         height: 1.0,
