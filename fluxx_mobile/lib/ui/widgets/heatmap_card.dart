@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../core/theme/apple_theme.dart';
 import '../../data/providers/repository_providers.dart';
+import '../screens/full_screen_map_screen.dart';
 
 class HeatmapCard extends ConsumerStatefulWidget {
   const HeatmapCard({super.key});
@@ -73,13 +74,17 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          MapWidget(
-            viewport: CameraViewportState(
-              center: Point(coordinates: Position(73.01, 19.01)),
-              zoom: 12.0,
+          RepaintBoundary(
+            child: IgnorePointer(
+              child: MapWidget(
+                viewport: CameraViewportState(
+                  center: Point(coordinates: Position(73.01, 19.01)),
+                  zoom: 12.0,
+                ),
+                onMapCreated: _onMapCreated,
+                onStyleLoadedListener: _onStyleLoadedListener,
+              ),
             ),
-            onMapCreated: _onMapCreated,
-            onStyleLoadedListener: _onStyleLoadedListener,
           ),
           if (!isConnected)
             Container(
@@ -106,7 +111,26 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
                 ),
               ],
             ),
-          )
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: AppleGlassCard(
+              padding: EdgeInsets.zero,
+              borderRadius: 24,
+              child: IconButton(
+                icon: const Icon(Icons.fullscreen, color: Colors.white),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FullScreenMapScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );

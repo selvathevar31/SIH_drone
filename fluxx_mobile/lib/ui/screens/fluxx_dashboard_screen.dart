@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -11,6 +13,8 @@ import '../widgets/hourly_forecast_strip.dart';
 import '../widgets/heatmap_card.dart';
 import '../widgets/metrics_grid.dart';
 import '../widgets/floating_chat_button.dart';
+import '../widgets/learn_aqi_section.dart';
+import 'package:geolocator/geolocator.dart';
 
 enum LocationStatus { enabled, disabled }
 
@@ -22,13 +26,133 @@ class FluxxDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
-  WeatherCondition _currentCondition = WeatherCondition.sunny;
+  bool _isLoadingWeather = true;
+  List<HourlyForecast> _forecast = [];
+  String _currentConditionStr = 'Sunny';
+  int _isDay = 1;
 
-  void _cycleWeatherCondition() {
+  @override
+  void initState() {
+    super.initState();
+    _fetchWeatherData();
+  }
+
+  String _mapWmoToConditionStr(int wmoCode) {
+    if (wmoCode <= 1) return 'Sunny';
+    if (wmoCode <= 3) return 'Cloudy';
+    if ((wmoCode >= 51 && wmoCode <= 67) || (wmoCode >= 80 && wmoCode <= 82)) return 'Rainy';
+    if ((wmoCode >= 71 && wmoCode <= 77) || (wmoCode >= 85 && wmoCode <= 86)) return 'Snow';
+    if (wmoCode >= 95) return 'Thunderstorm';
+    return 'Cloudy';
+  }
+
+  String _mapWmoToIcon(int wmoCode) {
+    if (wmoCode <= 1) return 'sun';
+    if (wmoCode <= 3) return 'cloud';
+    if ((wmoCode >= 51 && wmoCode <= 67) || (wmoCode >= 80 && wmoCode <= 82)) return 'rain';
+    if ((wmoCode >= 71 && wmoCode <= 77) || (wmoCode >= 85 && wmoCode <= 86)) return 'snow';
+    if (wmoCode >= 95) return 'storm';
+    return 'cloud';
+  }
+
+  Future<void> _fetchWeatherData() async {
+    try {
+      double lat = 19.0330;
+      double lon = 73.0297;
+
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (serviceEnabled) {
+        LocationPermission permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+          try {
+            Position position = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.low,
+              timeLimit: const Duration(seconds: 5),
+            );
+            lat = position.latitude;
+            lon = position.longitude;
+          } catch (_) {
+            // Timeout or error, fallback to defaults
+          }
+        }
+      }
+
+      final url = Uri.parse(
+          'https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&hourly=temperature_2m,weather_code&current_weather=true&temperature_unit=fahrenheit');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final currentWmo = data['current_weather']['weathercode'] as int;
+        final currentIsDay = data['current_weather']['is_day'] as int;
+        final conditionStr = _mapWmoToConditionStr(currentWmo);
+
+        final hourlyTimes = data['hourly']['time'] as List;
+        final hourlyTemps = data['hourly']['temperature_2m'] as List;
+        final hourlyCodes = data['hourly']['weather_code'] as List;
+
+        final now = DateTime.now();
+        List<HourlyForecast> fetchedForecast = [];
+        for (int i = 0; i < hourlyTimes.length; i++) {
+          final time = DateTime.parse(hourlyTimes[i] as String);
+          if (time.isAfter(now.subtract(const Duration(hours: 1))) && fetchedForecast.length < 5) {
+            fetchedForecast.add(HourlyForecast(
+              time: time,
+              temperature: (hourlyTemps[i] as num).toDouble(),
+              aqi: 65, // Mock AQI placeholder
+              conditionIcon: _mapWmoToIcon(hourlyCodes[i] as int),
+            ));
+          }
+        }
+        
+        if (mounted) {
+          setState(() {
+            _currentConditionStr = conditionStr;
+            _isDay = currentIsDay;
+            _forecast = fetchedForecast;
+            _isLoadingWeather = false;
+          });
+        }
+      } else {
+        _setMockWeather();
+      }
+    } catch (e) {
+      _setMockWeather();
+    }
+  }
+
+  void _setMockWeather() {
+    if (!mounted) return;
     setState(() {
-      final nextIndex = (_currentCondition.index + 1) % WeatherCondition.values.length;
-      _currentCondition = WeatherCondition.values[nextIndex];
+      _currentConditionStr = 'Sunny';
+      _isDay = 1;
+      _forecast = List.generate(
+        5,
+        (index) => HourlyForecast(
+          time: DateTime.now().add(Duration(hours: index)),
+          temperature: 66 + (index % 5).toDouble(),
+          aqi: 65 + index,
+          conditionIcon: 'sun',
+        ),
+      );
+      _isLoadingWeather = false;
     });
+  }
+
+  WeatherCondition _getWeatherCondition(String condition) {
+    if (_isDay == 0) return WeatherCondition.night;
+
+    final lower = condition.toLowerCase();
+    if (lower.contains('rain') || lower.contains('drizzle') || lower.contains('storm') || lower.contains('thunder')) {
+      return WeatherCondition.lightRain;
+    }
+    if (lower.contains('clear') || lower.contains('sun') || lower.contains('cloud')) {
+      return WeatherCondition.sunny;
+    }
+    return WeatherCondition.sunny;
   }
 
   void _showLanguageSelector(BuildContext context, String detectedState) {
@@ -109,43 +233,41 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
       co2: 412.0,
       humidity: 61.0,
     );
+    final displayAqiData = mockAqiData.copyWith(condition: _currentConditionStr);
 
-    final temperature = ((mockAqiData.temperature - 32) * 5 / 9).round();
-    final condition = mockAqiData.condition.tr();
+    final temperature = ((displayAqiData.temperature - 32) * 5 / 9).round();
+    final condition = displayAqiData.condition.tr();
 
-    final mockForecast = List.generate(
-      12,
-      (index) => HourlyForecast(
-        time: DateTime.now().add(Duration(hours: index)),
-        temperature: 66 + (index % 5).toDouble(),
-        aqi: 65 + index,
-        conditionIcon: 'sun',
-      ),
-    );
+    final dynamicCondition = _getWeatherCondition(_currentConditionStr);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: GestureDetector(
-        onTap: _cycleWeatherCondition,
-        behavior: HitTestBehavior.opaque,
-        child: Stack(
-          children: [
-            DynamicAtmosphereBackground(
-              condition: _currentCondition,
-            ),
+      body: Stack(
+        children: [
+          DynamicAtmosphereBackground(
+            condition: dynamicCondition,
+          ),
             CustomScrollView(
               physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
               slivers: [
                 SliverToBoxAdapter(
-                  child: AqiHeroHeader(data: mockAqiData),
+                  child: AqiHeroHeader(data: displayAqiData),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      HourlyForecastStrip(forecast: mockForecast),
+                      if (_isLoadingWeather)
+                        const SizedBox(
+                          height: 140,
+                          child: Center(child: CircularProgressIndicator(color: Colors.white)),
+                        )
+                      else
+                        HourlyForecastStrip(forecast: _forecast),
                       const SizedBox(height: 12),
                       const HeatmapCard(),
+                      const SizedBox(height: 12),
+                      const LearnAQISection(),
                       const SizedBox(height: 12),
                       const MetricsGrid(),
                       const SizedBox(height: 100), // Bottom padding for floating button
@@ -212,7 +334,6 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 }
