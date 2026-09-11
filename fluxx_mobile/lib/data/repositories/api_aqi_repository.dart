@@ -6,6 +6,8 @@ import 'package:fluxx_mobile/core/models/hourly_forecast.dart';
 import 'package:fluxx_mobile/core/models/spatial_telemetry.dart';
 import 'package:fluxx_mobile/data/repositories/mock_aqi_repository.dart';
 import 'package:fluxx_mobile/services/api_service.dart';
+import 'package:fluxx_mobile/services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 class ApiAqiRepository implements IAqiRepository {
   final MockAqiRepository _fallback = const MockAqiRepository();
@@ -15,22 +17,38 @@ class ApiAqiRepository implements IAqiRepository {
   @override
   Future<AqiData> getCurrentAqi() async {
     try {
-      final response = await http.get(Uri.parse('${ApiService.baseUrl}/api/forecast/anand-vihar'))
+      // 1. Get Location
+      Position position = await LocationService.getCurrentLocation();
+      String? userLocName = await LocationService.getLocationName(position.latitude, position.longitude);
+
+      // 2. Query nearby air quality
+      final response = await http.get(Uri.parse('${ApiService.baseUrl}/api/aqi/nearby?lat=${position.latitude}&lon=${position.longitude}'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
+        // Define simple logic for category
+        final aqiVal = data['aqi'] ?? 0;
+        String cat = 'Good';
+        if (aqiVal > 50) cat = 'Moderate';
+        if (aqiVal > 100) cat = 'Unhealthy for Sensitive';
+        if (aqiVal > 150) cat = 'Unhealthy';
+        if (aqiVal > 200) cat = 'Very Unhealthy';
+        if (aqiVal > 300) cat = 'Hazardous';
+
         return AqiData(
-          aqi: data['current_aqi'] ?? 0,
-          status: data['aqi_category'] ?? 'Unknown',
-          locationName: data['location'] != null ? data['location']['name'] : 'Anand Vihar',
-          temperature: 30.0, // Can be updated from backend later
+          aqi: aqiVal,
+          status: cat,
+          locationName: data['dataLocation'] != null ? data['dataLocation']['name'] : 'Unknown Source',
+          userLocationName: userLocName,
+          source: data['source'] ?? 'UNKNOWN',
+          temperature: (data['temperature'] as num?)?.toDouble() ?? 30.0,
           condition: 'Clear',
-          pm25: 0.0, 
-          pm10: 0.0,
-          co2: 400.0,
-          humidity: 50.0,
+          pm25: (data['pm25'] as num?)?.toDouble() ?? 0.0, 
+          pm10: (data['pm10'] as num?)?.toDouble() ?? 0.0,
+          co2: (data['co2'] as num?)?.toDouble() ?? 400.0,
+          humidity: (data['humidity'] as num?)?.toDouble() ?? 50.0,
         );
       }
     } catch (e) {
@@ -84,14 +102,17 @@ class ApiAqiRepository implements IAqiRepository {
   }
 
   @override
-  Future<SpatialTelemetry> getSpatialTelemetry() async {
+  Future<SpatialTelemetry> getSpatialTelemetry({String metric = 'aqi'}) async {
     try {
-      final response = await http.get(Uri.parse('${ApiService.baseUrl}/api/heatmap'))
+      final response = await http.get(Uri.parse('${ApiService.baseUrl}/api/heatmap?metric=$metric'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final data = response.body; // Mapbox Map GL layer expects GeoJSON string
-        return SpatialTelemetry(geoJson: data);
+        final data = jsonDecode(response.body); 
+        return SpatialTelemetry(
+          geoJson: jsonEncode(data['flight_path']),
+          hotspotsGeoJson: jsonEncode(data['hotspots'])
+        );
       }
     } catch (e) {
       // Ignore and fallback to graceful offline state

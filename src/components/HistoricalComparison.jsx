@@ -1,69 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { compareMissions } from '../services/api';
-import ComparisonMap from './ComparisonMap';
+import MissionMap from './MissionMap';
 import { ArrowUpRight, ArrowDownRight, Minus, AlertTriangle } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Label, LineChart, Line, Legend } from 'recharts';
 
-export default function HistoricalComparison({ missions }) {
+export default function HistoricalComparison({ missions, datasetStore, fetchAndStoreDataset }) {
   const [currentMissionId, setCurrentMissionId] = useState('');
   const [previousMissionId, setPreviousMissionId] = useState('');
-  const [comparisonData, setComparisonData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Map state
-  const [mapMode, setMapMode] = useState('CHANGE'); // CURRENT, PREVIOUS, CHANGE
-  const [selectedMetric, setSelectedMetric] = useState('AQI'); // AQI, PM2.5, PM10
-
-  // Determine if comparison is valid
-  const isDuplicate = currentMissionId !== '' && currentMissionId === previousMissionId;
-  const canCompare = currentMissionId !== '' && previousMissionId !== '' && !isDuplicate;
 
   useEffect(() => {
     if (missions.length >= 2 && !currentMissionId && !previousMissionId) {
-      // Pick the two most recent distinct missions
       setCurrentMissionId(missions[0].mission_id);
       setPreviousMissionId(missions[1].mission_id);
     }
-  }, [missions]);
+  }, [missions, currentMissionId, previousMissionId]);
 
-  // When currentMissionId changes, if it now matches previousMissionId, auto-swap
-  const handleCurrentChange = (newId) => {
-    if (newId === previousMissionId) {
-      // Swap: move old currentMissionId to previousMissionId
-      setPreviousMissionId(currentMissionId);
+  useEffect(() => {
+    if (currentMissionId && (!datasetStore || !datasetStore.has(currentMissionId))) {
+      const meta = missions.find(m => m.mission_id === currentMissionId);
+      if (meta && fetchAndStoreDataset) fetchAndStoreDataset(currentMissionId, meta);
     }
+    if (previousMissionId && (!datasetStore || !datasetStore.has(previousMissionId))) {
+      const meta = missions.find(m => m.mission_id === previousMissionId);
+      if (meta && fetchAndStoreDataset) fetchAndStoreDataset(previousMissionId, meta);
+    }
+  }, [currentMissionId, previousMissionId, datasetStore, fetchAndStoreDataset, missions]);
+
+  const handleCurrentChange = (newId) => {
+    if (newId === previousMissionId) setPreviousMissionId(currentMissionId);
     setCurrentMissionId(newId);
   };
 
   const handlePreviousChange = (newId) => {
-    if (newId === currentMissionId) {
-      // Swap: move old previousMissionId to currentMissionId
-      setCurrentMissionId(previousMissionId);
-    }
+    if (newId === currentMissionId) setCurrentMissionId(previousMissionId);
     setPreviousMissionId(newId);
   };
 
-  useEffect(() => {
-    if (canCompare) {
-      const fetchComparison = async () => {
-        try {
-          setLoading(true);
-          setError(null);
-          const data = await compareMissions(currentMissionId, previousMissionId);
-          setComparisonData(data);
-        } catch (err) {
-          setError(err.message);
-          setComparisonData(null);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchComparison();
-    } else {
-      setComparisonData(null);
-    }
-  }, [currentMissionId, previousMissionId]);
+  const isDuplicate = currentMissionId !== '' && currentMissionId === previousMissionId;
 
   // Zero missions
   if (!missions || missions.length === 0) {
@@ -88,248 +60,332 @@ export default function HistoricalComparison({ missions }) {
     );
   }
 
-  const formatPct = (pct) => {
-    if (pct === null || pct === undefined) return 'N/A';
-    const sign = pct > 0 ? '+' : '';
-    return `${sign}${pct.toFixed(1)}%`;
-  };
+  const m1Data = datasetStore?.get(currentMissionId);
+  const m2Data = datasetStore?.get(previousMissionId);
+  const isLoading = !m1Data || !m2Data;
 
-  const MetricCard = ({ title, metric, isHotspot = false }) => {
-    if (!metric) return null;
-
-    let cValue = isHotspot ? metric.current_count : metric.current_average;
-    let pValue = isHotspot ? metric.previous_count : metric.previous_average;
-    let absoluteChange = isHotspot ? metric.count_change : metric.absolute_change;
-    let percentageChange = isHotspot ? null : metric.percentage_change;
+  const MetricCard = ({ title, m1Val, m2Val, unit = '' }) => {
+    const valid1 = typeof m1Val === 'number' && !isNaN(m1Val);
+    const valid2 = typeof m2Val === 'number' && !isNaN(m2Val);
+    
+    let change = null;
+    let pctChange = null;
+    if (valid1 && valid2 && m2Val !== 0) {
+      change = m1Val - m2Val;
+      pctChange = (change / Math.abs(m2Val)) * 100;
+    } else if (valid1 && valid2 && m2Val === 0 && m1Val !== 0) {
+      change = m1Val;
+      pctChange = 100;
+    }
 
     let Icon = Minus;
     let colorClass = 'text-text-primary';
     let iconClass = 'text-text-muted';
 
-    if (absoluteChange > 0) {
+    if (change > 0) {
       Icon = ArrowUpRight;
       colorClass = 'text-hazardous';
       iconClass = 'text-hazardous';
-    } else if (absoluteChange < 0) {
+    } else if (change < 0) {
       Icon = ArrowDownRight;
       colorClass = 'text-safe';
       iconClass = 'text-safe';
     }
 
     return (
-      <div className="bg-surface-secondary border border-border rounded p-4 flex flex-col gap-2">
-        <h4 className="text-sm font-bold text-text-muted uppercase tracking-widest">{title}</h4>
-        <div className="flex items-end gap-2 mb-1">
-          <span className="font-mono text-2xl font-bold text-text-primary">
-            {cValue !== null ? (isHotspot ? cValue : cValue.toFixed(1)) : 'N/A'}
-          </span>
-          <span className="text-text-muted text-sm font-mono mb-1">
-            (prev {pValue !== null ? (isHotspot ? pValue : pValue.toFixed(1)) : 'N/A'})
-          </span>
+      <div className="bg-surface-secondary border border-border rounded-[12px] p-5 flex flex-col gap-3 shadow-sm flex-1 min-w-[150px]">
+        <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{title}</h4>
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-end border-b border-border/50 pb-2">
+            <span className="text-text-muted text-xs">M1 (Current)</span>
+            <span className="font-mono text-xl font-bold text-text-primary">
+              {valid1 ? m1Val.toFixed(1) : 'N/A'}{unit}
+            </span>
+          </div>
+          <div className="flex justify-between items-end pb-1">
+            <span className="text-text-muted text-xs">M2 (Prev)</span>
+            <span className="font-mono text-md text-text-secondary">
+              {valid2 ? m2Val.toFixed(1) : 'N/A'}{unit}
+            </span>
+          </div>
         </div>
-        <div className={`flex items-center gap-1 font-mono text-sm font-bold ${colorClass}`}>
+        <div className={`flex items-center gap-1 font-mono text-xs font-bold ${colorClass} mt-auto pt-2`}>
           <Icon className={`w-4 h-4 ${iconClass}`} />
-          <span>{absoluteChange > 0 ? '+' : ''}{absoluteChange !== null ? (isHotspot ? absoluteChange : absoluteChange.toFixed(1)) : 'N/A'}</span>
-          {!isHotspot && percentageChange !== null && (
-            <span className="opacity-80">({formatPct(percentageChange)})</span>
+          <span>{change > 0 ? '+' : ''}{change !== null ? change.toFixed(1) : 'N/A'} {unit}</span>
+          {pctChange !== null && (
+            <span className="opacity-80 ml-1">({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%)</span>
           )}
         </div>
       </div>
     );
   };
 
+  const renderTrendChart = () => {
+    if (!m1Data || !m2Data) return null;
+    const maxLen = Math.max(m1Data.telemetry.length, m2Data.telemetry.length);
+    const data = [];
+    for (let i = 0; i < maxLen; i++) {
+      data.push({
+        index: i,
+        m1_aqi: m1Data.telemetry[i] ? m1Data.telemetry[i].aqi : null,
+        m2_aqi: m2Data.telemetry[i] ? m2Data.telemetry[i].aqi : null,
+      });
+    }
+
+    return (
+      <div className="bg-surface-primary border border-border rounded-[16px] p-6 shadow-card flex flex-col h-full">
+        <h3 className="text-text-primary font-bold tracking-widest uppercase text-sm mb-1">Pollution Trend Comparison</h3>
+        <p className="text-text-secondary text-xs mb-6">AQI over mission timeline</p>
+        <div className="flex-1 min-h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#DCE5E2" opacity={0.3} vertical={false} />
+              <XAxis dataKey="index" hide />
+              <YAxis stroke="#8C9EA4" fontSize={10} axisLine={false} tickLine={false} />
+              <RechartsTooltip 
+                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc', fontSize: '12px' }}
+                labelFormatter={() => ''}
+              />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+              <Line type="monotone" dataKey="m1_aqi" name="Mission 1 AQI" stroke="#22D3EE" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="m2_aqi" name="Mission 2 AQI" stroke="#94A3B8" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAltitudeChart = () => {
+    if (!m1Data || !m2Data) return null;
+    const data1 = m1Data.telemetry.reduce((acc, d) => {
+        const alt = parseFloat(d.altitude);
+        const aqi = parseFloat(d.aqi);
+        if (!isNaN(alt) && !isNaN(aqi)) acc.push({ altitude: alt, aqi: aqi });
+        return acc;
+    }, []);
+    const data2 = m2Data.telemetry.reduce((acc, d) => {
+        const alt = parseFloat(d.altitude);
+        const aqi = parseFloat(d.aqi);
+        if (!isNaN(alt) && !isNaN(aqi)) acc.push({ altitude: alt, aqi: aqi });
+        return acc;
+    }, []);
+
+    return (
+      <div className="bg-surface-primary border border-border rounded-[16px] p-6 shadow-card flex flex-col h-full">
+        <h3 className="text-text-primary font-bold tracking-widest uppercase text-sm mb-1">Pollution by Altitude</h3>
+        <p className="text-text-secondary text-xs mb-6">AQI distribution vs altitude</p>
+        <div className="flex-1 min-h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#DCE5E2" opacity={0.3} horizontal={true} vertical={true} />
+              <XAxis type="number" dataKey="aqi" name="AQI" stroke="#8C9EA4" fontSize={10} axisLine={false} tickLine={false}>
+                <Label value="AQI" offset={-10} position="insideBottom" fill="#8C9EA4" fontSize={10} />
+              </XAxis>
+              <YAxis type="number" dataKey="altitude" name="Altitude" stroke="#8C9EA4" fontSize={10} axisLine={false} tickLine={false}>
+                <Label value="Altitude (m)" angle={-90} position="insideLeft" fill="#8C9EA4" fontSize={10} />
+              </YAxis>
+              <RechartsTooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc', fontSize: '12px' }} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+              <Scatter name="Mission 1" data={data1} fill="#22D3EE" opacity={0.6} shape="circle" />
+              <Scatter name="Mission 2" data={data2} fill="#94A3B8" opacity={0.6} shape="circle" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProfileChart = () => {
+    if (!m1Data || !m2Data) return null;
+    const metrics = ['pm25', 'pm10', 'no2', 'so2', 'co', 'o3'];
+    const labels = { pm25: 'PM2.5', pm10: 'PM10', no2: 'NO₂', so2: 'SO₂', co: 'CO', o3: 'O₃' };
+    const maxRefs = { pm25: 250, pm10: 430, no2: 100, so2: 50, co: 10, o3: 150 };
+
+    const getAvg = (data, key) => {
+      let sum = 0, count = 0;
+      data.telemetry.forEach(r => {
+        const val = parseFloat(r[key]);
+        if (!isNaN(val)) { sum += val; count++; }
+      });
+      return count > 0 ? sum / count : 0;
+    };
+
+    return (
+      <div className="bg-surface-primary border border-border rounded-[16px] p-6 shadow-card flex flex-col h-full">
+        <h3 className="text-text-primary font-bold tracking-widest uppercase text-sm mb-1">Pollutant Profile Comparison</h3>
+        <p className="text-text-secondary text-xs mb-6">Average concentrations</p>
+        <div className="flex-1 flex flex-col justify-between gap-4 overflow-y-auto custom-scrollbar pr-2 min-h-[200px]">
+          {metrics.map(m => {
+            const v1 = getAvg(m1Data, m);
+            const v2 = getAvg(m2Data, m);
+            const p1 = Math.min((v1 / maxRefs[m]) * 100, 100) || 0;
+            const p2 = Math.min((v2 / maxRefs[m]) * 100, 100) || 0;
+            
+            return (
+              <div key={m} className="flex flex-col gap-1">
+                <div className="flex justify-between items-end">
+                  <span className="text-xs font-bold text-text-primary w-12">{labels[m]}</span>
+                  <div className="flex gap-4 text-[10px] font-mono text-text-muted">
+                    <span className="text-telemetry">{v1.toFixed(1)}</span>
+                    <span>vs</span>
+                    <span>{v2.toFixed(1)}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-[2px]">
+                  <div className="w-full h-2 bg-surface-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-telemetry rounded-full" style={{ width: `${p1}%` }} />
+                  </div>
+                  <div className="w-full h-2 bg-surface-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-text-muted rounded-full" style={{ width: `${p2}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="flex flex-col h-full gap-4 max-w-[1920px] mx-auto w-full">
+    <div className="flex flex-col h-full gap-6 max-w-[1920px] mx-auto w-full p-2">
       
       {/* Top Bar: Selectors */}
-      <div className="bg-surface-primary rounded-lg border border-border p-4 flex flex-col lg:flex-row gap-4 items-center justify-between shadow-sm">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-text-primary tracking-widest uppercase">Historical Comparison</h2>
+      <div className="bg-surface-primary rounded-lg border border-border p-4 flex flex-col lg:flex-row gap-4 items-center justify-between shadow-sm shrink-0">
+        <div className="flex flex-col">
+          <h2 className="text-xl font-bold text-text-primary tracking-widest uppercase mb-1">Mission Comparison</h2>
+          <span className="text-text-secondary text-xs">Compare air quality metrics between two missions</span>
         </div>
         
         <div className="flex flex-col lg:flex-row items-center gap-4 w-full lg:w-auto">
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Current Survey</label>
-            <select 
-              value={currentMissionId}
-              onChange={(e) => handleCurrentChange(e.target.value)}
-              className="bg-surface-secondary border border-border text-telemetry font-mono p-2 rounded outline-none flex-1 lg:w-48"
-            >
-              {missions.map(m => (
-                <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-1 w-full lg:w-auto">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-bold text-telemetry uppercase tracking-wider w-20">Mission 1</label>
+              <select 
+                value={currentMissionId}
+                onChange={(e) => handleCurrentChange(e.target.value)}
+                className="bg-surface-secondary border border-border text-text-primary font-mono p-2 rounded outline-none flex-1 lg:w-48 text-xs"
+              >
+                {missions.map(m => (
+                  <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
+                ))}
+              </select>
+            </div>
+            {m1Data && <span className="text-[10px] text-text-muted ml-22 pl-2">Location: {m1Data.cityLabel}</span>}
           </div>
           
-          <div className="hidden lg:block text-text-muted px-2">VS</div>
+          <div className="hidden lg:block text-text-muted px-2 font-bold italic">VS</div>
           
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Compare With</label>
-            <select 
-              value={previousMissionId}
-              onChange={(e) => handlePreviousChange(e.target.value)}
-              className="bg-surface-secondary border border-border text-text-primary font-mono p-2 rounded outline-none flex-1 lg:w-48"
-            >
-              {missions.map(m => (
-                <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-1 w-full lg:w-auto">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider w-20">Mission 2</label>
+              <select 
+                value={previousMissionId}
+                onChange={(e) => handlePreviousChange(e.target.value)}
+                className="bg-surface-secondary border border-border text-text-primary font-mono p-2 rounded outline-none flex-1 lg:w-48 text-xs"
+              >
+                {missions.map(m => (
+                  <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
+                ))}
+              </select>
+            </div>
+            {m2Data && <span className="text-[10px] text-text-muted ml-22 pl-2">Location: {m2Data.cityLabel}</span>}
           </div>
+
+          <button 
+            className="px-6 py-2 bg-telemetry hover:bg-telemetry/80 text-background font-bold tracking-widest uppercase rounded text-sm transition-colors mt-2 lg:mt-0"
+          >
+            Compare
+          </button>
         </div>
       </div>
 
       {isDuplicate && (
-        <div className="bg-warning/10 border border-warning/30 text-warning rounded p-4 text-center font-bold uppercase tracking-wide text-sm">
+        <div className="bg-warning/10 border border-warning/30 text-warning rounded p-4 text-center font-bold uppercase tracking-wide text-sm shrink-0">
           Select two different missions to compare.
         </div>
       )}
 
-      {loading && (
+      {isLoading && (
         <div className="flex-1 flex items-center justify-center bg-surface-primary rounded-lg border border-border">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-4 border-telemetry border-t-transparent rounded-full animate-spin"></div>
-            <div className="text-telemetry font-mono uppercase tracking-widest text-sm">Matching Geometries...</div>
+            <div className="text-telemetry font-mono uppercase tracking-widest text-sm">Loading Datasets...</div>
           </div>
         </div>
       )}
 
-      {error && !loading && (
-        <div className="bg-hazardous/10 border border-hazardous/30 text-hazardous rounded p-4 text-center">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && comparisonData && (
-        <div className="flex-1 flex flex-col xl:flex-row gap-4 overflow-hidden">
+      {!isLoading && !isDuplicate && m1Data && m2Data && (
+        <div className="flex flex-col gap-8 flex-1 overflow-y-auto custom-scrollbar pr-2 pb-8">
           
-          {/* Left Panel: Metrics & Stats */}
-          <div className="w-full xl:w-1/3 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-            
-            {/* Overview Summary */}
-            <div className={`p-4 rounded-lg border flex items-center justify-between ${
-              comparisonData.summary.overall_direction === 'IMPROVED' ? 'bg-safe/10 border-safe/30 text-safe' :
-              comparisonData.summary.overall_direction === 'WORSENED' ? 'bg-hazardous/10 border-hazardous/30 text-hazardous' :
-              'bg-surface-secondary border-border text-text-primary'
-            }`}>
-              <span className="font-bold uppercase tracking-widest text-sm">Overall Trend</span>
-              <span className="font-mono font-bold">{comparisonData.summary.overall_direction}</span>
-            </div>
-
-            {/* Metric Cards */}
-            <div className="grid grid-cols-2 gap-4">
-              <MetricCard title="AQI" metric={comparisonData.overall.aqi} />
-              <MetricCard title="PM2.5" metric={comparisonData.overall.pm25} />
-              <MetricCard title="PM10" metric={comparisonData.overall.pm10} />
-              <MetricCard title="Hotspots" metric={comparisonData.hotspots} isHotspot={true} />
-            </div>
-            
-            {/* Matching Stats */}
-            <div className="bg-surface-primary rounded-lg border border-border p-4 flex flex-col gap-3">
-              <h4 className="text-sm font-bold text-text-muted uppercase tracking-widest">Spatial Matching</h4>
-              <div className="text-xs text-text-secondary">
-                Matched readings within {comparisonData.matching.radius_meters}m radius.
-              </div>
-              
-              <div className="flex flex-col gap-2 font-mono text-sm">
-                <div className="flex justify-between items-center pb-2 border-b border-border/50">
-                  <span className="text-text-muted">Matched Points</span>
-                  <span className="text-telemetry font-bold">{comparisonData.matching.matched}</span>
-                </div>
-                <div className="flex justify-between items-center pb-2 border-b border-border/50">
-                  <span className="text-text-muted">Current Total / Unmatched</span>
-                  <span>{comparisonData.matching.current_total} / {comparisonData.matching.current_unmatched}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-text-muted">Previous Total / Unmatched</span>
-                  <span>{comparisonData.matching.previous_total} / {comparisonData.matching.previous_unmatched}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Mini Chart */}
-            <div className="bg-surface-primary rounded-lg border border-border p-4 flex flex-col gap-3 min-h-[250px] flex-1">
-              <h4 className="text-sm font-bold text-text-muted uppercase tracking-widest">Cross-Section Trend</h4>
-              <div className="flex-1 min-h-0 w-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={comparisonData.spatial_data.slice(0, 100)}>
-                    <defs>
-                      <linearGradient id="colorC" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#64748b" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis dataKey="distance_meters" hide />
-                    <YAxis stroke="#475569" fontSize={10} width={30} tickFormatter={(val) => Math.round(val)} />
-                    <RechartsTooltip 
-                      contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc', fontSize: '12px' }}
-                      itemStyle={{ color: '#f8fafc' }}
-                      formatter={(value, name) => [value.toFixed(1), name === 'aqi.current' ? 'Current AQI' : 'Previous AQI']}
-                      labelFormatter={() => ''}
-                    />
-                    <Area type="monotone" dataKey="aqi.previous" stroke="#64748b" fillOpacity={1} fill="url(#colorP)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="aqi.current" stroke="#3b82f6" fillOpacity={1} fill="url(#colorC)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="text-[10px] text-text-muted text-center italic">First 100 matched points</div>
-            </div>
-            
+          {/* KPI Row */}
+          <div className="flex flex-wrap lg:flex-nowrap gap-4">
+            <MetricCard 
+              title="Avg AQI" 
+              m1Val={m1Data.stats?.avg} 
+              m2Val={m2Data.stats?.avg} 
+            />
+            <MetricCard 
+              title="Avg PM2.5" 
+              m1Val={m1Data.dashboardData?.mission_stats?.avg_pm25} 
+              m2Val={m2Data.dashboardData?.mission_stats?.avg_pm25} 
+              unit=" µg/m³"
+            />
+            <MetricCard 
+              title="Avg PM10" 
+              m1Val={m1Data.dashboardData?.mission_stats?.avg_pm10} 
+              m2Val={m2Data.dashboardData?.mission_stats?.avg_pm10} 
+              unit=" µg/m³"
+            />
+            <MetricCard 
+              title="Max AQI" 
+              m1Val={m1Data.stats?.max} 
+              m2Val={m2Data.stats?.max} 
+            />
+            <MetricCard 
+              title="Area Surveyed" 
+              m1Val={(m1Data.dashboardData?.mission_stats?.distance_km || 0) * 0.2} 
+              m2Val={(m2Data.dashboardData?.mission_stats?.distance_km || 0) * 0.2} 
+              unit=" km²"
+            />
           </div>
 
-          {/* Right Panel: Map */}
-          <div className="w-full xl:w-2/3 flex flex-col bg-surface-primary rounded-lg border border-border overflow-hidden">
-            
-            {/* Map Controls */}
-            <div className="p-3 border-b border-border bg-surface-elevated flex flex-col sm:flex-row justify-between gap-3 items-center">
-              <div className="flex bg-background rounded border border-border p-1 w-full sm:w-auto">
-                <button 
-                  onClick={() => setMapMode('CURRENT')}
-                  className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 px-3 rounded transition-colors ${mapMode === 'CURRENT' ? 'bg-surface-elevated text-text-primary shadow' : 'text-text-muted hover:text-text-primary'}`}
-                >
-                  Current
-                </button>
-                <button 
-                  onClick={() => setMapMode('PREVIOUS')}
-                  className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 px-3 rounded transition-colors ${mapMode === 'PREVIOUS' ? 'bg-surface-elevated text-text-primary shadow' : 'text-text-muted hover:text-text-primary'}`}
-                >
-                  Previous
-                </button>
-                <button 
-                  onClick={() => setMapMode('CHANGE')}
-                  className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 px-3 rounded transition-colors ${mapMode === 'CHANGE' ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'}`}
-                >
-                  Change
-                </button>
+          {/* Dual Maps */}
+          <div className="flex flex-col lg:flex-row gap-6 h-[550px] shrink-0">
+            <div className="flex-1 flex flex-col gap-2 relative">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-surface-elevated/90 backdrop-blur border border-telemetry/50 rounded-full px-6 py-1.5 shadow-lg pointer-events-none">
+                <span className="font-bold text-telemetry tracking-widest uppercase text-[10px]">Mission 1 — {new Date(m1Data.dashboardData?.mission?.start_time).toLocaleDateString()}</span>
               </div>
-
-              <div className="flex bg-background rounded border border-border p-1 w-full sm:w-auto">
-                {['AQI', 'PM2.5', 'PM10'].map(metric => (
-                  <button 
-                    key={metric}
-                    onClick={() => setSelectedMetric(metric)}
-                    className={`flex-1 text-xs font-bold uppercase tracking-wider py-1.5 px-3 rounded transition-colors ${selectedMetric === metric ? 'bg-surface-elevated text-text-primary shadow border border-border/50' : 'text-text-muted hover:text-text-primary'}`}
-                  >
-                    {metric}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Map View */}
-            <div className="flex-1 relative min-h-[400px]">
-              <ComparisonMap 
-                spatialData={comparisonData.spatial_data} 
-                mapMode={mapMode} 
-                selectedMetric={selectedMetric} 
+              <MissionMap 
+                missionId={currentMissionId}
+                flightPath={m1Data.telemetry}
+                hotspots={m1Data.dashboardData?.hotspots || []}
+                telemetry={m1Data.dashboardData?.current_environment || []}
+                allDatasets={[]}
               />
             </div>
-            
+            <div className="flex-1 flex flex-col gap-2 relative">
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-surface-elevated/90 backdrop-blur border border-text-muted/50 rounded-full px-6 py-1.5 shadow-lg pointer-events-none">
+                <span className="font-bold text-text-primary tracking-widest uppercase text-[10px]">Mission 2 — {new Date(m2Data.dashboardData?.mission?.start_time).toLocaleDateString()}</span>
+              </div>
+              <MissionMap 
+                missionId={previousMissionId}
+                flightPath={m2Data.telemetry}
+                hotspots={m2Data.dashboardData?.hotspots || []}
+                telemetry={m2Data.dashboardData?.current_environment || []}
+                allDatasets={[]}
+              />
+            </div>
           </div>
+
+          {/* Bottom Analytics Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 shrink-0 h-[350px]">
+            {renderTrendChart()}
+            {renderAltitudeChart()}
+            {renderProfileChart()}
+          </div>
+
         </div>
       )}
     </div>

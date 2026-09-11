@@ -47,7 +47,7 @@ class MockAqiRepository implements IAqiRepository {
   }
 
   @override
-  Future<SpatialTelemetry> getSpatialTelemetry() async {
+  Future<SpatialTelemetry> getSpatialTelemetry({String metric = 'aqi'}) async {
     // 1-second delay as requested
     await Future<void>.delayed(const Duration(seconds: 1));
 

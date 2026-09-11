@@ -1,7 +1,6 @@
 const { getCategoryFromAQI } = require('./aqi');
 
-const HOTSPOT_MIN_AQI = Number(process.env.HOTSPOT_MIN_AQI || 100);
-const HOTSPOT_MIN_SAMPLES = Number(process.env.HOTSPOT_MIN_SAMPLES || 5);
+const HOTSPOT_MIN_SAMPLES = Number(process.env.HOTSPOT_MIN_SAMPLES || 3);
 const HOTSPOT_RADIUS_METERS = Number(process.env.HOTSPOT_RADIUS_METERS || 75);
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -79,12 +78,35 @@ function dbscan(points, eps, minPts) {
     return labels;
 }
 
-function detectHotspotsForReadings(readings) {
+function getPriority(val, metric) {
+    if (metric === 'pm25') {
+        if (val > 250) return 'P1';
+        if (val > 150) return 'P2';
+        if (val > 55) return 'P3';
+    } else if (metric === 'pm10') {
+        if (val > 424) return 'P1';
+        if (val > 354) return 'P2';
+        if (val > 254) return 'P3';
+    } else { // default AQI
+        if (val > 300) return 'P1';
+        if (val > 200) return 'P2';
+        if (val > 150) return 'P3';
+    }
+    return 'Normal';
+}
+
+function detectHotspotsForReadings(readings, metric = 'aqi') {
     if (!readings || readings.length === 0) return [];
 
-    const highReadings = readings.filter(
-        (r) => r.aqi !== null && r.aqi !== undefined && r.aqi >= HOTSPOT_MIN_AQI
-    );
+    let minThreshold = 100; // default for AQI
+    if (metric === 'pm25') minThreshold = 35.4; // Unhealthy for Sensitive Groups
+    else if (metric === 'pm10') minThreshold = 154; // Unhealthy for Sensitive Groups
+    else minThreshold = 100; // AQI
+
+    const highReadings = readings.filter((r) => {
+        const val = r[metric];
+        return val !== null && val !== undefined && val >= minThreshold;
+    });
 
     if (highReadings.length < HOTSPOT_MIN_SAMPLES) return [];
 
@@ -149,6 +171,8 @@ function detectHotspotsForReadings(readings) {
             average_pm10: sumPm10 > 0 ? (sumPm10 / count) : null,
             peak_pm10: maxPm10 !== -Infinity ? maxPm10 : null,
             severity: getCategoryFromAQI(maxAqi),
+            priority: getPriority(metric === 'pm25' ? maxPm25 : (metric === 'pm10' ? maxPm10 : maxAqi), metric),
+            metric_value: metric === 'pm25' ? maxPm25 : (metric === 'pm10' ? maxPm10 : maxAqi),
             reading_count: count,
             min_altitude: altitudeCount > 0 ? minAltitude : null,
             max_altitude: altitudeCount > 0 ? maxAltitude : null,

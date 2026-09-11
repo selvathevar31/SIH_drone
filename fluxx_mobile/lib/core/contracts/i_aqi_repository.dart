@@ -13,6 +13,6 @@ abstract class IAqiRepository {
   Future<List<HourlyForecast>> getHourlyForecast();
 
   /// Fetches GeoJSON or tile data for the Mapbox HeatmapCard.
-  /// Maps to: Supabase RPC 'get_spatial_telemetry'
-  Future<SpatialTelemetry> getSpatialTelemetry();
+  /// Retrieves geo-referenced heatmap data for Mapbox visualization.
+  Future<SpatialTelemetry> getSpatialTelemetry({String metric = 'aqi'});
 }

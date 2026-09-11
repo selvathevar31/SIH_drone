@@ -50,10 +50,14 @@ final hourlyForecastProvider = FutureProvider<List<HourlyForecast>>((ref) {
   return ref.watch(aqiRepositoryProvider).getHourlyForecast();
 });
 
+/// Holds the currently selected metric (aqi, pm25, pm10) for the heatmap.
+final heatmapMetricProvider = StateProvider<String>((ref) => 'aqi');
+
 /// Fetches geo-referenced heatmap telemetry for the Mapbox layer.
 /// Consumed via: ref.watch(spatialTelemetryProvider)
 final spatialTelemetryProvider = FutureProvider<SpatialTelemetry>((ref) {
-  return ref.watch(aqiRepositoryProvider).getSpatialTelemetry();
+  final metric = ref.watch(heatmapMetricProvider);
+  return ref.watch(aqiRepositoryProvider).getSpatialTelemetry(metric: metric);
 });
 
 /// WebSockets real-time telemetry stream
@@ -69,7 +73,7 @@ final liveTelemetryStreamProvider = StreamProvider<SpatialTelemetry>((ref) {
   return socketService.telemetryStream;
 });
 
-final socketConnectionStreamProvider = StreamProvider<bool>((ref) {
+final socketConnectionStreamProvider = StreamProvider<SocketConnectionState>((ref) {
   final socketService = ref.watch(socketServiceProvider);
   return socketService.connectionStream;
 });

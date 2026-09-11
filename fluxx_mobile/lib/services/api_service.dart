@@ -8,35 +8,45 @@ import 'package:http/http.dart' as http;
 class ApiService {
   /// Express server address (local network).
   /// For Android emulators use `http://10.0.2.2:8000` instead.
-  static const String baseUrl = 'http://192.168.0.105:8000';
+  static const String defaultUrl = 'http://10.0.2.2:8000';
+  static const String baseUrl = String.fromEnvironment('API_URL', defaultValue: defaultUrl);
 
-  /// Sends [prompt] to the AI query endpoint and returns the answer string.
+  /// Sends [prompt] to the AI query endpoint and returns the full JSON map.
   ///
   /// [missionId] scopes the query to a specific drone mission context.
-  /// Returns a user-friendly fallback message if the server is unreachable.
-  static Future<String> queryAiAssistant(
+  static Future<Map<String, dynamic>> queryAqiChat(
     String prompt, {
     String missionId = 'default',
   }) async {
     try {
+      final url = Uri.parse('$baseUrl/api/aqi/chat');
+      print('[ApiService] Sending request to: $url');
+      print('[ApiService] Request payload: message="$prompt", mission_id="$missionId"');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/api/ai/query'),
+        url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'question': prompt,
+          'message': prompt,
           'mission_id': missionId,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
+
+      print('[ApiService] Response HTTP Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['answer'] as String;
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        print('[ApiService] Request successful.');
+        return decoded;
       }
 
-      return 'Server returned status ${response.statusCode}. Please try again.';
+      print('[ApiService] Error response body: ${response.body}');
+      return {'answer': 'Server returned status ${response.statusCode}. Please try again.'};
     } catch (e) {
-      return 'Unable to reach the FLUXX server. '
-          'Please check your connection and try again.';
+      print('[ApiService] Request failed. Reason: $e');
+      return {
+        'answer': 'Unable to reach the FLUXX server. Please check your connection and try again.'
+      };
     }
   }
 }

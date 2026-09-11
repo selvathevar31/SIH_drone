@@ -63,13 +63,17 @@ class SpatialTelemetry {
   /// Remote GeoJSON URL served by Supabase Storage for the Mapbox source.
   final String geoJsonUrl;
 
-  /// Raw GeoJSON FeatureCollection data.
+  /// Raw GeoJSON FeatureCollection data for flight path.
   final String? geoJson;
+
+  /// Raw GeoJSON FeatureCollection data for clustered hotspots.
+  final String? hotspotsGeoJson;
 
   const SpatialTelemetry({
     this.points = const [],
     this.geoJsonUrl = '',
     this.geoJson,
+    this.hotspotsGeoJson,
   });
 
   factory SpatialTelemetry.fromJson(Map<String, dynamic> json) =>
@@ -79,23 +83,27 @@ class SpatialTelemetry {
             .toList(),
         geoJsonUrl: json['geoJsonUrl'] as String,
         geoJson: json['geoJson'] as String?,
+        hotspotsGeoJson: json['hotspotsGeoJson'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
         'points': points.map((p) => p.toJson()).toList(),
         'geoJsonUrl': geoJsonUrl,
         if (geoJson != null) 'geoJson': geoJson,
+        if (hotspotsGeoJson != null) 'hotspotsGeoJson': hotspotsGeoJson,
       };
 
   SpatialTelemetry copyWith({
     List<TelemetryPoint>? points,
     String? geoJsonUrl,
     String? geoJson,
+    String? hotspotsGeoJson,
   }) =>
       SpatialTelemetry(
         points: points ?? this.points,
         geoJsonUrl: geoJsonUrl ?? this.geoJsonUrl,
         geoJson: geoJson ?? this.geoJson,
+        hotspotsGeoJson: hotspotsGeoJson ?? this.hotspotsGeoJson,
       );
 
   @override
@@ -104,12 +112,13 @@ class SpatialTelemetry {
       other is SpatialTelemetry &&
           runtimeType == other.runtimeType &&
           geoJsonUrl == other.geoJsonUrl &&
-          geoJson == other.geoJson;
+          geoJson == other.geoJson &&
+          hotspotsGeoJson == other.hotspotsGeoJson;
 
   @override
-  int get hashCode => Object.hash(geoJsonUrl, points.length, geoJson);
+  int get hashCode => Object.hash(geoJsonUrl, points.length, geoJson, hotspotsGeoJson);
 
   @override
   String toString() =>
-      'SpatialTelemetry(geoJsonUrl: $geoJsonUrl, points: ${points.length}, hasGeoJson: ${geoJson != null})';
+      'SpatialTelemetry(geoJsonUrl: $geoJsonUrl, points: ${points.length}, hasGeoJson: ${geoJson != null}, hasHotspotsGeoJson: ${hotspotsGeoJson != null})';
 }

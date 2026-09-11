@@ -10,6 +10,10 @@ class AqiData {
   final String status;
 
   final String locationName;
+  
+  final String? userLocationName;
+
+  final String source;
 
   /// Ambient temperature in degrees Celsius.
   final double temperature;
@@ -39,6 +43,8 @@ class AqiData {
     required this.pm10,
     required this.co2,
     required this.humidity,
+    this.userLocationName,
+    this.source = 'FLUXX_DB',
   });
 
   factory AqiData.fromJson(Map<String, dynamic> json) => AqiData(
@@ -51,6 +57,8 @@ class AqiData {
         pm10: (json['pm10'] as num).toDouble(),
         co2: (json['co2'] as num).toDouble(),
         humidity: (json['humidity'] as num).toDouble(),
+        userLocationName: json['userLocationName'] as String?,
+        source: json['source'] as String? ?? 'FLUXX_DB',
       );
 
   Map<String, dynamic> toJson() => {
@@ -63,6 +71,8 @@ class AqiData {
         'pm10': pm10,
         'co2': co2,
         'humidity': humidity,
+        'userLocationName': userLocationName,
+        'source': source,
       };
 
   AqiData copyWith({
@@ -75,6 +85,8 @@ class AqiData {
     double? pm10,
     double? co2,
     double? humidity,
+    String? userLocationName,
+    String? source,
   }) =>
       AqiData(
         aqi: aqi ?? this.aqi,
@@ -86,6 +98,8 @@ class AqiData {
         pm10: pm10 ?? this.pm10,
         co2: co2 ?? this.co2,
         humidity: humidity ?? this.humidity,
+        userLocationName: userLocationName ?? this.userLocationName,
+        source: source ?? this.source,
       );
 
   @override
@@ -101,15 +115,17 @@ class AqiData {
           pm25 == other.pm25 &&
           pm10 == other.pm10 &&
           co2 == other.co2 &&
-          humidity == other.humidity;
+          humidity == other.humidity &&
+          userLocationName == other.userLocationName &&
+          source == other.source;
 
   @override
   int get hashCode => Object.hash(
-      aqi, status, locationName, temperature, condition, pm25, pm10, co2, humidity);
+      aqi, status, locationName, temperature, condition, pm25, pm10, co2, humidity, userLocationName, source);
 
   @override
   String toString() =>
       'AqiData(aqi: $aqi, status: $status, locationName: $locationName, '
       'temperature: $temperature, condition: $condition, pm25: $pm25, '
-      'pm10: $pm10, co2: $co2, humidity: $humidity)';
+      'pm10: $pm10, co2: $co2, humidity: $humidity, userLocationName: $userLocationName, source: $source)';
 }

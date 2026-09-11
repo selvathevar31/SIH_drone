@@ -133,7 +133,7 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
         5,
         (index) => HourlyForecast(
           time: DateTime.now().add(Duration(hours: index)),
-          temperature: 66 + (index % 5).toDouble(),
+          temperature: 30 + (index % 5).toDouble(),
           aqi: 65 + index,
           conditionIcon: 'sun',
         ),
@@ -222,20 +222,24 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
         userLocation.city.toLowerCase().contains('unavailable');
     final locationStatus = isLocationDisabled ? LocationStatus.disabled : LocationStatus.enabled;
 
-    final mockAqiData = const AqiData(
-      aqi: 65,
-      status: 'Moderate',
-      locationName: 'Cupertino',
-      temperature: 66,
-      condition: 'Sunny',
-      pm25: 12.5,
-      pm10: 25.0,
-      co2: 412.0,
-      humidity: 61.0,
-    );
-    final displayAqiData = mockAqiData.copyWith(condition: _currentConditionStr);
+    final aqiAsyncValue = ref.watch(currentAqiProvider);
+    final aqiData = aqiAsyncValue.valueOrNull;
 
-    final temperature = ((displayAqiData.temperature - 32) * 5 / 9).round();
+    final displayAqiData = aqiData != null 
+        ? aqiData.copyWith(condition: _currentConditionStr)
+        : const AqiData(
+            aqi: 0,
+            status: 'Loading',
+            locationName: 'Loading',
+            temperature: 30.0,
+            condition: 'Sunny',
+            pm25: 0.0,
+            pm10: 0.0,
+            co2: 0.0,
+            humidity: 50.0,
+          );
+
+    final temperature = (displayAqiData.temperature).round();
     final condition = displayAqiData.condition.tr();
 
     final dynamicCondition = _getWeatherCondition(_currentConditionStr);
@@ -294,10 +298,43 @@ class _FluxxDashboardScreenState extends ConsumerState<FluxxDashboardScreen> {
                             'Location disabled',
                             style: TextStyle(color: Colors.redAccent, fontSize: 12),
                           )
+                        else if (displayAqiData.userLocationName != null)
+                          Text(
+                            displayAqiData.userLocationName!,
+                            style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          )
                         else if (userLocation != null)
                           Text(
                             '${userLocation.city}, ${userLocation.state}',
                             style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        if (aqiData != null && aqiData.source != 'FLUXX_DB')
+                          Container(
+                            margin: const EdgeInsets.only(top: 2, bottom: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                            ),
+                            child: Text(
+                              'Delhi demo data',
+                              style: const TextStyle(color: Colors.orange, fontSize: 9, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        else if (aqiData != null && aqiData.source == 'FLUXX_DB')
+                          Container(
+                            margin: const EdgeInsets.only(top: 2, bottom: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                            ),
+                            child: Text(
+                              'FLUXX data',
+                              style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         Text(
                           '$temperature°C | $condition',

@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const asyncHandler = require('../middlewares/asyncHandler');
-
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5000';
+const aqiChatController = require('../controllers/aqiChatController');
+const aqiLocationController = require('../controllers/aqiLocationController');
 
 // POST /api/aqi/predict-6h
 router.post('/predict-6h', asyncHandler(async (req, res) => {
@@ -42,5 +43,11 @@ router.post('/predict-6h', asyncHandler(async (req, res) => {
         }
     }
 }));
+
+// POST /api/aqi/chat
+router.post('/chat', aqiChatController.handleChat);
+
+// GET /api/aqi/nearby?lat={lat}&lon={lon}
+router.get('/nearby', asyncHandler(aqiLocationController.getNearbyAirQuality));
 
 module.exports = router;

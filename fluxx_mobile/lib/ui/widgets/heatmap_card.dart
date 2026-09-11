@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../core/theme/apple_theme.dart';
 import '../../data/providers/repository_providers.dart';
+import '../../services/socket_service.dart';
 import '../screens/full_screen_map_screen.dart';
 
 class HeatmapCard extends ConsumerStatefulWidget {
@@ -23,7 +25,7 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
   void _onStyleLoadedListener(StyleLoadedEventData data) async {
     isStyleLoaded = true;
 
-    // Initialize the source and layer so that updates can patch it
+    // 1. Flight Path Source (faint background)
     await mapboxMap?.style.addSource(GeoJsonSource(
       id: "aqi-source",
       data: '{"type":"FeatureCollection","features":[]}',
@@ -32,35 +34,98 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
     await mapboxMap?.style.addLayer(HeatmapLayer(
       id: "aqi-heatmap",
       sourceId: "aqi-source",
-      heatmapRadius: 25.0,
+      heatmapRadius: 15.0, // smaller
+      heatmapOpacity: 0.3, // faint
       heatmapColorExpression: [
         "interpolate",
         ["linear"],
         ["heatmap-density"],
-        0.0, "rgba(0, 255, 0, 0)",
-        0.2, "rgba(0, 255, 0, 1)",
-        0.5, "rgba(255, 255, 0, 1)",
-        0.8, "rgba(255, 191, 0, 1)",
-        1.0, "rgba(255, 0, 255, 1)",
+        0.0, "rgba(255, 255, 255, 0)",
+        0.5, "rgba(255, 255, 255, 0.2)",
+        1.0, "rgba(255, 255, 255, 0.4)",
       ],
     ));
 
+    // 2. Hotspots Source (clustering priority)
+    await mapboxMap?.style.addSource(GeoJsonSource(
+      id: "hotspots-source",
+      data: '{"type":"FeatureCollection","features":[]}',
+    ));
+
+    // Hotspot Circles
+    await mapboxMap?.style.addLayer(CircleLayer(
+      id: "hotspots-circle",
+      sourceId: "hotspots-source",
+      circleRadius: 12.0,
+      circleStrokeWidth: 2.0,
+      circleStrokeColor: 0xFFFFFFFF,
+      circleColorExpression: [
+        "match",
+        ["get", "priority"],
+        "P1", "rgba(255, 0, 0, 0.9)",     // Red
+        "P2", "rgba(255, 128, 0, 0.9)",   // Orange
+        "P3", "rgba(255, 255, 0, 0.9)",   // Yellow
+        "rgba(0, 255, 0, 0.5)"            // Normal/Default
+      ],
+    ));
+
+    // Hotspot Text (P1/P2/P3)
+    await mapboxMap?.style.addLayer(SymbolLayer(
+      id: "hotspots-text",
+      sourceId: "hotspots-source",
+      textField: "{priority}",
+      textSize: 10.0,
+      textColor: 0xFFFFFFFF,
+    ));
+
     // If data already arrived before style loaded, update it now
-    final initialData = ref.read(liveTelemetryStreamProvider).valueOrNull?.geoJson;
+    final initialData = ref.read(spatialTelemetryProvider).valueOrNull;
     if (initialData != null) {
-      mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", initialData);
+      if (initialData.geoJson != null) {
+        mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", initialData.geoJson!);
+      }
+      if (initialData.hotspotsGeoJson != null) {
+        mapboxMap?.style.setStyleSourceProperty("hotspots-source", "data", initialData.hotspotsGeoJson!);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final connectionStateAsync = ref.watch(socketConnectionStreamProvider);
-    final isConnected = connectionStateAsync.valueOrNull ?? false;
+    final connectionState = connectionStateAsync.valueOrNull ?? SocketConnectionState.connecting;
 
-    ref.listen(liveTelemetryStreamProvider, (previous, next) {
-      final geoJsonString = next.valueOrNull?.geoJson;
-      if (isStyleLoaded && mapboxMap != null && geoJsonString != null) {
-        mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", geoJsonString);
+    ref.listen(spatialTelemetryProvider, (previous, next) {
+      final data = next.valueOrNull;
+      if (isStyleLoaded && mapboxMap != null && data != null) {
+        if (data.geoJson != null) {
+          mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", data.geoJson!);
+          
+          // Parse the GeoJSON to find the center coordinate and recenter the map
+          try {
+            final parsed = jsonDecode(data.geoJson!);
+            if (parsed['features'] != null && parsed['features'].isNotEmpty) {
+              final firstFeature = parsed['features'].first;
+              if (firstFeature['geometry'] != null && firstFeature['geometry']['coordinates'] != null) {
+                final coords = firstFeature['geometry']['coordinates'];
+                if (coords.length >= 2) {
+                  final lon = coords[0] is double ? coords[0] : double.parse(coords[0].toString());
+                  final lat = coords[1] is double ? coords[1] : double.parse(coords[1].toString());
+                  print('[Mapbox] Recentering map to Mission Coordinate: Lat=$lat, Lon=$lon');
+                  mapboxMap?.setCamera(CameraOptions(
+                    center: Point(coordinates: Position(lon, lat)),
+                    zoom: 12.0,
+                  ));
+                }
+              }
+            }
+          } catch (e) {
+            print('[Mapbox] Error parsing GeoJSON to recenter map: $e');
+          }
+        }
+        if (data.hotspotsGeoJson != null) {
+          mapboxMap?.style.setStyleSourceProperty("hotspots-source", "data", data.hotspotsGeoJson!);
+        }
       }
     });
 
@@ -86,13 +151,29 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
               ),
             ),
           ),
-          if (!isConnected)
+          if (connectionState == SocketConnectionState.disconnected)
             Container(
               color: Colors.black54,
               alignment: Alignment.center,
               child: Text(
-                'Offline - Waiting for backend socket connection...',
+                'Offline - Disconnected from backend.',
                 style: FluxxTypography.secondaryMetric.copyWith(color: Colors.redAccent),
+              ),
+            )
+          else if (connectionState == SocketConnectionState.connecting)
+            Container(
+              color: Colors.black54,
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Connecting to telemetry socket...',
+                    style: FluxxTypography.secondaryMetric.copyWith(color: Colors.white),
+                  ),
+                ],
               ),
             ),
           Positioned(
@@ -131,7 +212,69 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
               ),
             ),
           ),
+          // Metric Selector
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 64, // leave space for fullscreen button
+            child: Row(
+              children: [
+                _buildMetricChip(context, ref, 'AQI', 'aqi'),
+                const SizedBox(width: 8),
+                _buildMetricChip(context, ref, 'PM2.5', 'pm25'),
+                const SizedBox(width: 8),
+                _buildMetricChip(context, ref, 'PM10', 'pm10'),
+              ],
+            ),
+          ),
+          // Priority Legend
+          Positioned(
+            bottom: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('P1: Critical', style: TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text('P2: High', style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text('P3: Mod', style: TextStyle(color: Colors.yellow, fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMetricChip(BuildContext context, WidgetRef ref, String label, String value) {
+    final currentMetric = ref.watch(heatmapMetricProvider);
+    final isSelected = currentMetric == value;
+    
+    return GestureDetector(
+      onTap: () {
+        ref.read(heatmapMetricProvider.notifier).state = value;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.black45,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? Colors.transparent : Colors.white24),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.white,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }

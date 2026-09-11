@@ -7,6 +7,8 @@ export default function OverviewAnalyticsCard({ dashboardData, telemetryData }) 
   const hotspots = dashboardData?.hotspots?.length || 0;
 
   let durationStr = '00:00';
+  let maxAltitude = stats.max_altitude || 0;
+  
   if (telemetryData && telemetryData.length > 0) {
     const start = new Date(telemetryData[0].timestamp).getTime();
     const end = new Date(telemetryData[telemetryData.length - 1].timestamp).getTime();
@@ -15,15 +17,23 @@ export default function OverviewAnalyticsCard({ dashboardData, telemetryData }) 
       const mins = Math.floor(diff / 60000);
       durationStr = `${mins} min`;
     }
+
+    const validAlts = telemetryData
+      .map(d => parseFloat(d.altitude))
+      .filter(a => !isNaN(a) && a !== null);
+      
+    if (validAlts.length > 0) {
+      maxAltitude = Math.round(Math.max(...validAlts));
+    }
   }
 
   const metrics = [
     { label: 'Distance Covered', value: `${stats.distance_km || 0} km`, icon: <Activity className="w-5 h-5 text-telemetry" /> },
     { label: 'Samples Collected', value: samples, icon: <DatabaseIcon /> },
     { label: 'Flight Duration', value: durationStr, icon: <Clock className="w-5 h-5 text-safe" /> },
-    { label: 'Max Altitude', value: `${stats.max_altitude || 0} m`, icon: <Compass className="w-5 h-5 text-warning" /> },
+    { label: 'Max Altitude', value: `${maxAltitude} m`, icon: <Compass className="w-5 h-5 text-warning" /> },
     { label: 'Hotspots Identified', value: hotspots, icon: <Crosshair className="w-5 h-5 text-hazardous" /> },
-    { label: 'Area Surveyed', value: `${(stats.distance_km * 0.2).toFixed(1)} km²`, icon: <MapIcon className="w-5 h-5 text-telemetry" /> },
+    { label: 'Area Surveyed', value: `${((stats.distance_km || 0) * 0.2).toFixed(1)} km²`, icon: <MapIcon className="w-5 h-5 text-telemetry" /> },
   ];
 
   return (

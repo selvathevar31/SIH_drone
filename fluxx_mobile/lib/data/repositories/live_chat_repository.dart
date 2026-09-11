@@ -12,12 +12,15 @@ class LiveChatRepository implements IChatRepository {
 
   @override
   Future<ChatResponse> queryRag(String prompt) async {
-    final answer = await ApiService.queryAiAssistant(prompt);
+    final responseMap = await ApiService.queryAqiChat(prompt);
 
     return ChatResponse(
-      message: answer,
+      message: responseMap['answer'] as String? ?? 'No response',
       source: 'express',
       timestamp: DateTime.now(),
+      sources: (responseMap['sources'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      dataUsed: responseMap['dataUsed'] as bool? ?? false,
+      ragUsed: responseMap['ragUsed'] as bool? ?? false,
     );
   }
 }

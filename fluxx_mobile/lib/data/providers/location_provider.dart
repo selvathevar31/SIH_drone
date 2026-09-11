@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 
 class UserLocation {
   final String city;
@@ -42,27 +41,10 @@ final locationProvider = FutureProvider<UserLocation>((ref) async {
     return UserLocation('Location unavailable', 'Unknown');
   }
 
-  try {
-    // Reverse geocode to extract locality (City) and administrativeArea (State)
-    final placemarks = await Geocoding().placemarkFromCoordinates(
-      position.latitude,
-      position.longitude,
-    ).timeout(const Duration(seconds: 10));
-
-    if (placemarks.isNotEmpty) {
-      final place = placemarks.first;
-      return UserLocation(
-        place.locality ?? 'Unknown City',
-        place.administrativeArea ?? 'Unknown State',
-      );
-    }
-  } catch (e) {
-    // Fallback if geocoding fails (e.g. timeout or no connection)
-    return UserLocation(
-      '${position.latitude.toStringAsFixed(2)}, ${position.longitude.toStringAsFixed(2)}',
-      'Coordinates',
-    );
-  }
+  return UserLocation(
+    '${position.latitude.toStringAsFixed(4)}',
+    '${position.longitude.toStringAsFixed(4)}',
+  );
 
   return UserLocation('Wahal', 'Maharashtra'); // Default fallback
 });

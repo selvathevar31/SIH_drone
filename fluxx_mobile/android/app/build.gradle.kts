@@ -23,7 +23,7 @@ android {
         applicationId = "com.fluxx.fluxx_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -76,4 +76,8 @@ repositories {
             password = project.properties["MAPBOX_DOWNLOADS_TOKEN"]?.toString() ?: ""
         }
     }
+}
+
+dependencies {
+    implementation("com.google.android.gms:play-services-cronet:18.0.1")
 }

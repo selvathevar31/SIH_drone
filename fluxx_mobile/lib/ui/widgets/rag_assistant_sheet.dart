@@ -7,7 +7,17 @@ import '../../data/providers/repository_providers.dart';
 class ChatMessage {
   final String text;
   final bool isUser;
-  ChatMessage(this.text, this.isUser);
+  final List<String>? sources;
+  final bool dataUsed;
+  final bool ragUsed;
+
+  ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.sources,
+    this.dataUsed = false,
+    this.ragUsed = false,
+  });
 }
 
 class RagAssistantSheet extends ConsumerStatefulWidget {
@@ -27,7 +37,7 @@ class _RagAssistantSheetState extends ConsumerState<RagAssistantSheet> {
     if (text.isEmpty) return;
 
     setState(() {
-      _messages.add(ChatMessage(text, true));
+      _messages.add(ChatMessage(text: text, isUser: true));
       _isLoading = true;
     });
     _textController.clear();
@@ -42,14 +52,20 @@ class _RagAssistantSheetState extends ConsumerState<RagAssistantSheet> {
       final response = await repo.queryRag(text);
       if (mounted) {
         setState(() {
-          _messages.add(ChatMessage(response.message, false));
+          _messages.add(ChatMessage(
+            text: response.message,
+            isUser: false,
+            sources: response.sources,
+            dataUsed: response.dataUsed,
+            ragUsed: response.ragUsed,
+          ));
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add(ChatMessage('error_connecting'.tr(), false));
+          _messages.add(ChatMessage(text: 'FLUXX Assistant couldn\'t connect to the analysis service. Please try again.', isUser: false));
           _isLoading = false;
         });
       }
@@ -119,9 +135,35 @@ class _RagAssistantSheetState extends ConsumerState<RagAssistantSheet> {
                             : Colors.black.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Text(
-                        msg.text.tr(),
-                        style: FluxxTypography.secondaryMetric,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            msg.text,
+                            style: FluxxTypography.secondaryMetric,
+                          ),
+                          if (!msg.isUser && msg.sources != null && msg.sources!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Wrap(
+                                spacing: 8,
+                                children: msg.sources!.map((source) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    source,
+                                    style: FluxxTypography.secondaryMetric.copyWith(
+                                      fontSize: 10,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                )).toList(),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   );
@@ -151,7 +193,7 @@ class _RagAssistantSheetState extends ConsumerState<RagAssistantSheet> {
                         controller: _textController,
                         style: FluxxTypography.secondaryMetric,
                         decoration: InputDecoration(
-                          hintText: 'assistant_placeholder_text'.tr(),
+                          hintText: 'Ask about air quality or mission data...',
                           hintStyle: FluxxTypography.secondaryMetric.copyWith(color: Colors.white54),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

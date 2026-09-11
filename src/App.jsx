@@ -340,8 +340,22 @@ function App() {
             <DataExplorer missionId={activeDatasetId} onLocateOnMap={handleLocateOnMap} />
           )}
           {currentView === 'history'    && <FlightHistory />}
-          {currentView === 'comparison' && <HistoricalComparison missions={missions} />}
-          {currentView === 'public'     && <PublicDashboard />}
+          {currentView === 'comparison' && (
+            <HistoricalComparison 
+              missions={missions} 
+              datasetStore={datasetStore} 
+              fetchAndStoreDataset={fetchAndStoreDataset}
+            />
+          )}
+          {currentView === 'public' && (
+            <PublicDashboard 
+              missions={missions}
+              datasetStore={datasetStore}
+              activeDatasetId={activeDatasetId}
+              setActiveDatasetId={setActiveDatasetId}
+              fetchAndStoreDataset={fetchAndStoreDataset}
+            />
+          )}
           {currentView === 'settings'   && <SettingsPanel />}
           {currentView === 'mission_analytics' && activeDatasetId && dashboardData && (
             <MissionAnalytics
@@ -442,29 +456,23 @@ function App() {
               </div>
 
               {/* SECTION 4: POLLUTION TREND (Full Width) */}
-              <div className="mt-8">
+              <div className="mt-8 h-96">
                 <PollutionTrendChart data={telemetryData} />
               </div>
 
               {/* SECTION 5: ANALYTICS ROW (3 Columns) */}
               <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* 1. Pollutant Profile */}
-                <div className="h-80">
-                  <PollutantProfile telemetryData={telemetryData} />
-                </div>
+                <PollutantProfile telemetryData={telemetryData} />
 
                 {/* 2. Pollution by Altitude */}
-                <div className="h-80">
-                  <PollutionAltitudeChart data={telemetryData} />
-                </div>
+                <PollutionAltitudeChart data={telemetryData} />
 
                 {/* 3. Flight/Mission Analytics */}
-                <div className="h-80">
-                  <OverviewAnalyticsCard 
-                    dashboardData={effectiveEntry?.dashboardData} 
-                    telemetryData={telemetryData} 
-                  />
-                </div>
+                <OverviewAnalyticsCard 
+                  dashboardData={effectiveEntry?.dashboardData} 
+                  telemetryData={telemetryData} 
+                />
               </div>
 
             </div>

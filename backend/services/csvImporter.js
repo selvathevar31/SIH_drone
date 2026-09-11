@@ -48,7 +48,8 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                     else if (/^pm\s*[\-_\.]?\s*10(\.0)?$/.test(cleanCol)) mappedCol = 'pm10';
                     else if (/^pm\s*[\-_\.]?\s*1(\.0)?$/.test(cleanCol)) mappedCol = 'pm1';
                     else if (aliasMap[cleanCol]) mappedCol = aliasMap[cleanCol];
-                    else if (['timestamp', 'latitude', 'longitude', 'altitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength'].includes(cleanCol)) {
+                    else if (/^altitude/.test(cleanCol)) mappedCol = 'altitude';
+                    else if (['timestamp', 'latitude', 'longitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength'].includes(cleanCol)) {
                         mappedCol = cleanCol;
                     }
                     

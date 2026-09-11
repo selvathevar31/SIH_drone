@@ -1,0 +1,10 @@
+Air Quality Index (AQI) is a yardstick that runs from 0 to 500. The higher the AQI value, the greater the level of air pollution and the greater the health concern.
+An AQI value of 50 or below represents good air quality, while an AQI value over 300 represents hazardous air quality.
+
+PM2.5: Fine particulate matter (PM2.5) is an air pollutant that is a concern for people's health when levels in air are high. PM2.5 are tiny particles in the air that reduce visibility and cause the air to appear hazy when levels are elevated.
+
+PM10: Particulate matter 10 (PM10) are inhalable particles, with diameters that are generally 10 micrometers and smaller. Exposure to PM10 can affect the heart and lungs and has been linked to health effects like cardiovascular and respiratory disease.
+
+Humidity and Air Quality: High humidity can make the air feel heavier and can trap pollutants closer to the ground, leading to higher localized AQI readings. When humidity is high, particulate matter can absorb moisture, swell, and become more likely to scatter light, which causes the haze often associated with smog.
+
+Common causes of high AQI: Vehicle emissions, industrial emissions, construction dust, agricultural burning, and stagnant weather conditions that trap pollutants near the surface.

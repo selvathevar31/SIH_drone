@@ -49,10 +49,14 @@ app.use('/api/forecast', forecastRouter);
 // Heatmap endpoint for mobile Mapbox integration
 app.get('/api/heatmap', async (req, res) => {
     try {
+        const metric = req.query.metric || 'aqi';
         const Reading = require('./models/Reading');
+        const { detectHotspotsForReadings } = require('./services/hotspotDetector');
+        
         const readings = await Reading.find({ latitude: { $exists: true }, longitude: { $exists: true } }).limit(2000);
         
-        const features = readings.map(r => ({
+        // 1. Flight Path FeatureCollection
+        const pathFeatures = readings.map(r => ({
             type: "Feature",
             geometry: {
                 type: "Point",
@@ -61,13 +65,38 @@ app.get('/api/heatmap', async (req, res) => {
             properties: {
                 aqi: r.aqi || 0,
                 pm25: r.pm25 || 0,
-                pm10: r.pm10 || 0
+                pm10: r.pm10 || 0,
+                metric_value: r[metric] || 0
+            }
+        }));
+
+        // 2. Hotspots FeatureCollection
+        const hotspotsData = detectHotspotsForReadings(readings, metric);
+        const hotspotFeatures = hotspotsData.map(h => ({
+            type: "Feature",
+            geometry: {
+                type: "Point",
+                coordinates: [h.longitude, h.latitude]
+            },
+            properties: {
+                priority: h.priority,
+                metric_value: h.metric_value,
+                aqi: h.peak_aqi,
+                pm25: h.peak_pm25,
+                pm10: h.peak_pm10,
+                radius: h.radius_meters
             }
         }));
 
         res.json({
-            type: "FeatureCollection",
-            features: features
+            flight_path: {
+                type: "FeatureCollection",
+                features: pathFeatures
+            },
+            hotspots: {
+                type: "FeatureCollection",
+                features: hotspotFeatures
+            }
         });
     } catch (e) {
         res.status(500).json({ error: e.toString() });

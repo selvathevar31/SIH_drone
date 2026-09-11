@@ -25,8 +25,15 @@ export default function PollutionAltitudeChart({ data }) {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
-    // Filter out invalid readings
-    return data.filter(d => d.altitude != null && d.aqi != null);
+    // Filter out invalid readings and cast to numbers
+    return data.reduce((acc, d) => {
+      const alt = parseFloat(d.altitude);
+      const aqi = parseFloat(d.aqi);
+      if (!isNaN(alt) && !isNaN(aqi)) {
+        acc.push({ ...d, altitude: alt, aqi: aqi });
+      }
+      return acc;
+    }, []);
   }, [data]);
 
   if (!chartData || chartData.length === 0) {
