@@ -7,19 +7,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#070B10',
+        background: '#F8FAFC',
         surface: {
-          primary: '#0D131A',
-          secondary: '#111922',
-          elevated: '#151F29',
+          primary: '#FFFFFF',
+          secondary: '#F1F5F9',
+          elevated: '#FFFFFF',
         },
         border: {
-          DEFAULT: '#202B36'
+          DEFAULT: '#E2E8F0'
         },
         text: {
-          primary: '#F1F5F9',
-          secondary: '#94A3B8',
-          muted: '#64748B'
+          primary: '#1E293B',
+          secondary: '#475569',
+          muted: '#94A3B8'
         },
         telemetry: '#22D3EE',
         safe: '#22C55E',

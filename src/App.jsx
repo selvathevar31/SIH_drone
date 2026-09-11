@@ -15,7 +15,8 @@ import { Clock } from 'lucide-react';
 import PollutionTrendChart from './components/PollutionTrendChart';
 import PollutionAltitudeChart from './components/PollutionAltitudeChart';
 import AQIHeatmap from './components/AQIHeatmap';
-import IntelligencePanel from './components/IntelligencePanel';
+import EnvironmentalMetrics from './components/EnvironmentalMetrics';
+import KeyInsights from './components/KeyInsights';
 import DatasetSelector, { cityColor } from './components/DatasetSelector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -350,50 +351,51 @@ function App() {
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────── */}
           {hasData && !isLoading && !error && currentView === 'overview' && (
-            <div className="max-w-[1920px] mx-auto flex flex-col gap-4">
+            <div className="max-w-[1920px] mx-auto flex flex-col gap-6">
 
-              {/* TOP STATUS BAR */}
-              <div className="flex justify-between items-center bg-surface-elevated px-4 py-2 rounded-lg border border-border">
-                <div className="flex items-center gap-5">
+              {/* SECTION 1: OVERVIEW HEADER */}
+              <div className="flex justify-between items-center bg-surface-primary px-5 py-3 rounded-lg border border-border shadow-sm">
+                <div className="flex items-center gap-6">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">Mission ID</span>
-                    <span className="text-sm font-mono font-bold text-telemetry">{effectiveMission?.mission_id || activeDatasetId}</span>
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Mission ID</span>
+                    <span className="text-sm font-mono font-bold text-text-primary">{effectiveMission?.mission_id || activeDatasetId}</span>
                   </div>
                   {hoveredDatasetId && hoveredDatasetId !== activeDatasetId && (
                     <>
-                      <div className="h-6 w-px bg-border/50" />
+                      <div className="h-8 w-px bg-border" />
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">Viewing</span>
-                        <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                        <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Viewing Area</span>
+                        <span className="text-sm font-bold text-text-primary">
                           {datasetStore.get(hoveredDatasetId)?.cityLabel || hoveredDatasetId}
                         </span>
                       </div>
                     </>
                   )}
-                  <div className="h-6 w-px bg-border/50" />
+                  <div className="h-8 w-px bg-border" />
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">Status</span>
-                    <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">System Status</span>
+                    <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-safe animate-pulse" />
-                      <span className="text-xs font-bold text-safe uppercase tracking-wider">Active</span>
+                      <span className="text-xs font-bold text-safe uppercase tracking-wider">Nominal</span>
                     </div>
                   </div>
-                  <div className="h-6 w-px bg-border/50 hidden md:block" />
+                  <div className="h-8 w-px bg-border hidden md:block" />
                   <div className="hidden md:flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase">System</span>
-                    <span className="text-xs font-bold text-text-primary uppercase tracking-wider">Nominal</span>
+                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Drone State</span>
+                    <span className="text-xs font-bold text-text-primary uppercase tracking-wider">Active Survey</span>
                   </div>
                 </div>
+                
                 <div className="flex items-center gap-3">
                   <span className="hidden lg:flex items-center gap-2 text-text-muted text-[10px] font-bold uppercase tracking-widest">
                     <Clock className="w-3.5 h-3.5" /> Time Filter
                   </span>
-                  <div className="flex gap-0.5 bg-surface-secondary p-0.5 rounded border border-border">
+                  <div className="flex gap-1 bg-surface-secondary p-1 rounded border border-border">
                     {['ALL', '30M', '15M', '5M'].map(tf => (
                       <button
                         key={tf}
                         onClick={() => setTimeFilter(tf)}
-                        className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded transition-colors ${timeFilter === tf ? 'bg-telemetry text-background' : 'text-text-muted hover:text-text-primary'}`}
+                        className={`px-3 py-1 text-xs font-bold uppercase tracking-widest rounded transition-colors ${timeFilter === tf ? 'bg-surface-primary shadow-sm text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
                       >
                         {tf === 'ALL' ? 'Full' : tf}
                       </button>
@@ -402,32 +404,17 @@ function App() {
                 </div>
               </div>
 
-              {/* ROW 1: Intelligence | AQI Heatmap | HUD */}
-              <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr_220px] gap-4 items-start">
+              {/* SECTION 2: ENVIRONMENTAL METRICS */}
+              <EnvironmentalMetrics 
+                stats={effectiveEntry?.dashboardData?.mission_stats} 
+                current={telemetryData.length > 0 ? telemetryData[telemetryData.length - 1] : dashboardData?.current_environment} 
+              />
 
-                {/* LEFT — Intelligence + Dataset Selector */}
-                <div className="flex flex-col gap-3 order-2 xl:order-1">
-                  {/* Dataset Selector */}
-                  <DatasetSelector
-                    datasets={datasetsArray}
-                    activeDatasetId={activeDatasetId}
-                    hoveredDatasetId={hoveredDatasetId}
-                    onSelect={(id) => {
-                      setActiveDatasetId(id);
-                      setSelectedMission(id);
-                      setHoveredDatasetId(null);
-                    }}
-                  />
-                  <IntelligencePanel
-                    telemetry={effectiveEntry?.telemetry || []}
-                    stats={effectiveEntry?.dashboardData?.mission_stats}
-                    hotspots={effectiveEntry?.dashboardData?.hotspots}
-                    mission={effectiveEntry?.dashboardData?.mission}
-                  />
-                </div>
-
-                {/* CENTER — AQI Spatial Heatmap (all datasets, independent IDW per city) */}
-                <div className="order-1 xl:order-2" style={{ height: 560 }}>
+              {/* SECTION 3: SPATIAL INTELLIGENCE (60% Heatmap / 40% Insights) */}
+              <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
+                
+                {/* LEFT 60% — Mapbox Heatmap */}
+                <div className="col-span-1 lg:col-span-6 h-[700px] shadow-md rounded-lg overflow-hidden border border-border flex flex-col">
                   <AQIHeatmap
                     datasets={datasetsArray}
                     activeDatasetId={activeDatasetId}
@@ -436,44 +423,15 @@ function App() {
                   />
                 </div>
 
-                {/* RIGHT — Live Telemetry HUD */}
-                <div className="flex flex-col gap-3 order-3">
-                  <MetricCards stats={effectiveEntry?.dashboardData?.mission_stats} />
+                {/* RIGHT 40% — Key Insights */}
+                <div className="col-span-1 lg:col-span-4 h-[700px]">
+                  <KeyInsights 
+                    telemetry={effectiveEntry?.telemetry || []}
+                    stats={effectiveEntry?.dashboardData?.mission_stats}
+                    hotspots={effectiveEntry?.dashboardData?.hotspots}
+                  />
                 </div>
-
-              </div>
-
-              {/* ROW 2: 2D Map + Satellite Map (all datasets shown) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ height: 420 }}>
-                <MissionMap
-                  missionId={activeDatasetId}
-                  flightPath={activeEntry?.telemetry || []}
-                  allDatasets={datasetsArray}
-                  currentLocation={dashboardData?.current_location}
-                  hotspots={dashboardData?.hotspots}
-                  telemetry={dashboardData?.current_environment}
-                  onDatasetHover={handleMapDatasetHover}
-                />
-                <MissionMap3D
-                  missionId={activeDatasetId}
-                  flightPath={activeEntry?.telemetry || []}
-                  currentLocation={dashboardData?.current_location}
-                  hotspots={dashboardData?.hotspots}
-                  telemetry={dashboardData?.current_environment}
-                />
-              </div>
-
-              {/* ROW 3: Charts (driven by hovered or active dataset) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: 340 }}>
-                <PollutionTrendChart
-                  telemetry={telemetryData}
-                  mission={effectiveMission}
-                  cityLabel={effectiveEntry?.cityLabel}
-                />
-                <PollutionAltitudeChart
-                  telemetry={telemetryData}
-                  cityLabel={effectiveEntry?.cityLabel}
-                />
+                
               </div>
 
             </div>
