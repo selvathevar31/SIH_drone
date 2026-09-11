@@ -1,6 +1,6 @@
 # FLUXX Environmental Data Contract
 
-This document defines the canonical environmental data contract for the FLUXX / QUDRACOPTER platform. This contract must be adhered to by all components (sensors, ingestion parsers, databases, dashboard APIs, GIS interfaces, and future AI/RAG layers).
+This document defines the canonical environmental data contract for the FLUXX / QUADCOPTER platform. This contract must be adhered to by all components (sensors, ingestion parsers, databases, dashboard APIs, GIS interfaces, and future AI/RAG layers).
 
 ---
 

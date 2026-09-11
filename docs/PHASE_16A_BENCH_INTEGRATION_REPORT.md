@@ -1,6 +1,6 @@
 # PHASE 16A BENCH INTEGRATION REPORT
 
-This document represents the formal sign-off for Phase 16A of the QUDRACOPTER environmental intelligence system. It enforces absolute clarity regarding the physical wiring of the payload, preventing dangerous electrical assumptions about exact sensor variants.
+This document represents the formal sign-off for Phase 16A of the QUADCOPTER environmental intelligence system. It enforces absolute clarity regarding the physical wiring of the payload, preventing dangerous electrical assumptions about exact sensor variants.
 
 ## 1. Hardware Inventory & Exact Identification
 | Component | Function | Exact Model/Variant | Status |
@@ -29,7 +29,7 @@ A Python integration test tool (`backend/tests/hardware_bench_client.py`) has be
 - **Enforced Security:** The backend explicitly enforces `data_source="hardware"` and an `X-Hardware-Token`.
 
 ## 5. Integration Readiness Gates
-The QUDRACOPTER system enforces five strict physical readiness gates.
+The QUADCOPTER system enforces five strict physical readiness gates.
 
 ### 🟩 SOFTWARE VERIFIED (PASS)
 The FastAPI backend and React dashboard gracefully handle hardware ingestion, missing null values, and prevent simulation spoofing.

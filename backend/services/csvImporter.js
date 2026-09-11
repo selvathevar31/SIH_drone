@@ -53,8 +53,8 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                     else if (/^no[x2]?\b/.test(cleanCol)) mappedCol = 'no2';
                     else if (aliasMap[cleanCol]) mappedCol = aliasMap[cleanCol];
                     else if (/^altitude/.test(cleanCol)) mappedCol = 'altitude';
-                    else if (['timestamp', 'latitude', 'longitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength'].includes(cleanCol)) {
-                        mappedCol = cleanCol;
+                    else if (['timestamp', 'latitude', 'longitude', 'temperature', 'humidity', 'speed', 'heading', 'battery', 'satellites', 'gps_status', 'signal_strength', 'mission_id', 'mission', 'missionid'].includes(cleanCol)) {
+                        mappedCol = (cleanCol === 'mission' || cleanCol === 'missionid') ? 'mission_id' : cleanCol;
                     }
                     
                     mappedHeaders.push(mappedCol);
@@ -62,6 +62,7 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 }
             }))
             .on('headers', (headers) => {
+                console.log(`[CSV] Parsing started`);
                 console.log(`[CSV PARSER] Original headers:`, originalHeaders);
                 console.log(`[CSV PARSER] Mapped headers:`, headers);
                 
@@ -223,9 +224,11 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 if (pm10 === null) warnings.push(`Row ${rowNum}: PM10 sensor telemetry is missing (stored as NULL).`);
 
                 const { aqi, category } = calculateAQI({ pm25, pm10 });
+                
+                const finalMissionId = row['mission_id'] && row['mission_id'].trim() !== '' ? row['mission_id'].trim() : missionId;
 
                 validReadings.push({
-                    mission_id: missionId,
+                    mission_id: finalMissionId,
                     data_source: dataSource,
                     timestamp: timestampVal,
                     latitude: lat,
@@ -253,7 +256,9 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                 acceptedRows++;
             })
             .on('end', () => {
-                console.log(`[CSV PARSER] End of stream. Total rows parsed: ${totalRows}`);
+                console.log(`[CSV] Rows parsed: ${totalRows}`);
+                console.log(`[CSV] Validation completed`);
+                
                 if (missingCols.length > 0) {
                     resolve({
                         success: false,

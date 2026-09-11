@@ -126,7 +126,7 @@ app.get('/api/health', async (req, res) => {
 
     res.json({
         status: "ok",
-        service: "QUDRACOPTER Backend (Node.js)",
+        service: "QUADCOPTER Backend (Node.js)",
         backend: "ONLINE",
         database: dbStatus,
         ai: aiStatus,

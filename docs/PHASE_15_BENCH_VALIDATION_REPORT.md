@@ -1,6 +1,6 @@
 # PHASE 15 BENCH VALIDATION REPORT
 
-The QUDRACOPTER environmental intelligence system has completed the Phase 15 Bench Hardware Validation stage. This phase focused entirely on moving from software simulation to physical ESP32 telemetry integration, ensuring that hardware failures (e.g. disconnected sensors) degrade gracefully without inventing false data.
+The QUADCOPTER environmental intelligence system has completed the Phase 15 Bench Hardware Validation stage. This phase focused entirely on moving from software simulation to physical ESP32 telemetry integration, ensuring that hardware failures (e.g. disconnected sensors) degrade gracefully without inventing false data.
 
 ## System Readiness Gates
 
@@ -41,4 +41,4 @@ Once the ESP32 is flashed and the voltage dividers are built, execute this proce
 9. **Verify Graceful Degradation:** Check the Dashboard. The Temperature and Humidity charts should display "Insufficient Data", but the PM2.5 chart and Map must continue functioning normally.
 10. **Recovery:** Reconnect the DHT11 and verify the charts resume plotting.
 
-**Conclusion:** The QUDRACOPTER software stack is robust, fault-tolerant, and structurally prepared for physical hardware. Proceed to electrical verification.
+**Conclusion:** The QUADCOPTER software stack is robust, fault-tolerant, and structurally prepared for physical hardware. Proceed to electrical verification.

@@ -1,4 +1,4 @@
-# QUDRACOPTER System Architecture
+# QUADCOPTER System Architecture
 
 ## Core Data Flow
 

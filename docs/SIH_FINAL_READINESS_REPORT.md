@@ -1,9 +1,9 @@
-# QUDRACOPTER - SIH FINAL READINESS REPORT
+# QUADCOPTER - SIH FINAL READINESS REPORT
 
 ## 1. Overall Readiness Status
 **READY WITH CONDITIONS**
 
-The QUDRACOPTER software stack is exceptionally robust, isolating simulated environmental responses from real telemetry and providing grounded, deterministic AI insights. The frontend is stable and performant under SIH presentation constraints.
+The QUADCOPTER software stack is exceptionally robust, isolating simulated environmental responses from real telemetry and providing grounded, deterministic AI insights. The frontend is stable and performant under SIH presentation constraints.
 
 However, a **CRITICAL hardware integration gap** exists regarding the physical sensor payload that must be addressed before flight.
 

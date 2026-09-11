@@ -1,9 +1,9 @@
-# QUDRACOPTER: SIH Demonstration Guide
+# QUADCOPTER: SIH Demonstration Guide
 
-This document outlines the setup, execution, and talking points for the SIH Final Demonstration of the QUDRACOPTER (FLUXX) Environmental Intelligence Platform.
+This document outlines the setup, execution, and talking points for the SIH Final Demonstration of the QUADCOPTER (FLUXX) Environmental Intelligence Platform.
 
 ## 1. System Architecture Overview
-QUDRACOPTER is a complete Closed-Loop Environmental Response Platform. It operates across three distinct modes:
+QUADCOPTER is a complete Closed-Loop Environmental Response Platform. It operates across three distinct modes:
 - **LIVE MODE:** Ingests live telemetry, detects hotspots, and dynamically flags zones.
 - **HISTORICAL MODE:** Explores past missions for trend analysis and comparative metrics.
 - **REPLAY MODE:** Deterministically replays missions to provide full explainability for every AI decision.
@@ -16,7 +16,7 @@ QUDRACOPTER is a complete Closed-Loop Environmental Response Platform. It operat
 ## 3. Demo Execution Procedure
 
 ### Stage 1: Mission Initialization
-- Open the QUDRACOPTER Dashboard.
+- Open the QUADCOPTER Dashboard.
 - From the UI Demo Control Center, instruct the backend to start a simulated mission by running `python scripts/mission_simulator.py`.
 - **Talking Point:** "The system registers the mission and prepares the environmental data contract."
 

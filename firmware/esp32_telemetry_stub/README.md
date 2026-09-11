@@ -1,9 +1,9 @@
-# QUDRACOPTER ESP32 Hardware Stub
+# QUADCOPTER ESP32 Hardware Stub
 
 This directory contains the integration guidelines for the ESP32 environmental sensing payload.
 
 ## Responsibilities
-The QUDRACOPTER physical drone strictly splits responsibilities between two systems to maintain flight safety:
+The QUADCOPTER physical drone strictly splits responsibilities between two systems to maintain flight safety:
 
 1. **ArduPilot (Flight Controller)**: Handles GPS, IMU, battery telemetry, and motor control. It transmits flight telemetry (latitude, longitude, altitude) over a UART connection to the ESP32 using MAVLink.
 2. **ESP32 (Environmental Payload)**: Connects to the environmental sensors (PMS2.5, DHT11) via I2C/UART/GPIO. It fuses the environmental readings with the MAVLink flight telemetry and pushes the combined JSON payload over Wi-Fi/LTE to the `POST /api/telemetry/hardware` API.

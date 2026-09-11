@@ -48,7 +48,7 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    Serial.println("\nQUDRACOPTER PHASE 16A ESP32 BENCH CLIENT");
+    Serial.println("\nQUADCOPTER PHASE 16A ESP32 BENCH CLIENT");
     
     // Connect Wi-Fi
     WiFi.begin(ssid, password);

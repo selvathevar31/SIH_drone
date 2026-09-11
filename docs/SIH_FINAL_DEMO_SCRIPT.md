@@ -1,4 +1,4 @@
-# QUDRACOPTER - SIH FINAL DEMO SCRIPT
+# QUADCOPTER - SIH FINAL DEMO SCRIPT
 
 ## Pre-Flight Checklist
 Before the judges arrive:
@@ -13,7 +13,7 @@ Before the judges arrive:
 
 ### STEP 1: The Pitch & Overview
 * **Action:** Open the **Overview** tab. Do not click anything yet.
-* **Script:** "Welcome to QUDRACOPTER. This is our unified Environmental Intelligence dashboard designed for real-time monitoring of urban pollution. On this screen, we combine live telemetry from our drone swarm with multi-dimensional analytics. Notice the clean separation of status, geographic mapping, analytics, and AI intelligence."
+* **Script:** "Welcome to QUADCOPTER. This is our unified Environmental Intelligence dashboard designed for real-time monitoring of urban pollution. On this screen, we combine live telemetry from our drone swarm with multi-dimensional analytics. Notice the clean separation of status, geographic mapping, analytics, and AI intelligence."
 * **Judge Observation:** The UI is clean, no empty charts, and the layout prioritizes live data.
 
 ### STEP 2: Initiate Live Mission

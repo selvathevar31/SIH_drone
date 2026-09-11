@@ -48,7 +48,7 @@ export default function PublicDashboard({ missions, datasetStore, activeDatasetI
       <header className="flex justify-between items-center px-8 py-5 border-b border-border/50 bg-surface-primary sticky top-0 z-50">
         <div className="flex items-center gap-2">
           <Globe className="w-8 h-8 text-telemetry" />
-          <span className="text-xl font-bold tracking-widest text-text-primary uppercase font-mono">QUDRACOPTER</span>
+          <span className="text-xl font-bold tracking-widest text-text-primary uppercase font-mono">QUADCOPTER</span>
         </div>
         
         <nav className="hidden md:flex gap-8 items-center text-sm font-bold tracking-wider text-text-secondary uppercase">

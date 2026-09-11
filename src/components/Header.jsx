@@ -69,7 +69,7 @@ export default function Header({
       {/* Brand Logo & Basic Mode */}
       <div className="flex items-center gap-4">
         <div className="flex flex-col">
-          <h1 className="font-bold text-sm tracking-[0.15em] text-surface-dark uppercase">QUDRACOPTER</h1>
+          <h1 className="font-bold text-sm tracking-[0.15em] text-surface-dark uppercase">QUADCOPTER</h1>
           <span className="text-[8px] font-bold tracking-[0.2em] text-telemetry uppercase">Aerial Air Quality Control</span>
         </div>
         <div className="h-6 w-px bg-border/80 mx-2" />

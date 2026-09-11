@@ -1,6 +1,6 @@
-# QUDRACOPTER Hardware Telemetry Contract
+# QUADCOPTER Hardware Telemetry Contract
 
-This document defines the strict API contract between the physical ESP32 drone payload and the QUDRACOPTER backend ingestion service.
+This document defines the strict API contract between the physical ESP32 drone payload and the QUADCOPTER backend ingestion service.
 
 ## 1. Authentication
 The ESP32 must authenticate telemetry packets using a pre-shared key (PSK) in the HTTP headers.
