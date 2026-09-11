@@ -14,13 +14,8 @@ const navGroups = [
     title: 'ANALYTICS',
     items: [
       { id: 'history', icon: History, label: 'Flight History' },
-      { id: 'comparison', icon: GitCompare, label: 'Comparison' }
-    ]
-  },
-  {
-    title: 'INTELLIGENCE',
-    items: [
-      { id: 'replay', icon: PlayCircle, label: 'Mission Replay' }
+      { id: 'comparison', icon: GitCompare, label: 'Comparison' },
+      { id: 'mission_analytics', icon: Activity, label: 'Mission Analytics' }
     ]
   },
   {
@@ -132,14 +127,17 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
                           setCurrentView(item.id);
                         }
                       }}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors relative group ${
                         item.id === currentView 
-                          ? 'bg-surface-elevated text-telemetry border border-border/50 shadow-sm' 
-                          : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
+                          ? 'bg-telemetry/5 text-text-primary font-medium' 
+                          : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary/50'
                       }`}
                     >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="hidden lg:block text-xs font-bold uppercase tracking-wider">{item.label}</span>
+                      {item.id === currentView && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-telemetry rounded-r-full" />
+                      )}
+                      <Icon className={`w-4 h-4 shrink-0 transition-colors ${item.id === currentView ? 'text-telemetry' : 'text-text-muted group-hover:text-text-primary'}`} />
+                      <span className="hidden lg:block text-xs font-medium tracking-wide">{item.label}</span>
                     </a>
                   );
                 })}
@@ -148,12 +146,12 @@ export default function Sidebar({ onUploadSuccess, currentView = 'overview', set
           ))}
         </nav>
         
-        <div className="p-3 mb-4">
+        <div className="p-4 mb-4">
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-surface-secondary hover:bg-surface-elevated border border-border rounded-md text-text-primary text-sm font-medium transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-telemetry hover:bg-telemetry/90 shadow-soft rounded-lg text-white text-xs font-bold tracking-wide uppercase transition-all"
           >
-            <UploadCloud className="w-4 h-4 text-telemetry" />
+            <UploadCloud className="w-4 h-4 text-white" />
             <span className="hidden lg:block">Import CSV</span>
           </button>
         </div>

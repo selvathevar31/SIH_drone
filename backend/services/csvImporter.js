@@ -173,8 +173,9 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                         pm10 = val;
                     }
 
-                    if (row['temperature'] && row['temperature'].trim() !== '') {
-                        const val = parseFloat(row['temperature']);
+                    const rowTemp = row['temperature'] || row['temperature_C'];
+                    if (rowTemp && rowTemp.trim() !== '') {
+                        const val = parseFloat(rowTemp);
                         if (isNaN(val)) throw new Error("Invalid temperature");
                         if (val < -50.0 || val > 100.0) {
                             errors.push({ row: rowNum, field: "temperature", reason: `Temperature ${val}°C falls outside range [-50, 100].` });
@@ -184,8 +185,9 @@ function processCsvUpload(fileContent, missionId, dataSource = "CSV") {
                         temp = val;
                     }
 
-                    if (row['humidity'] && row['humidity'].trim() !== '') {
-                        const val = parseFloat(row['humidity']);
+                    const rowHumid = row['humidity'] || row['humidity_pct'];
+                    if (rowHumid && rowHumid.trim() !== '') {
+                        const val = parseFloat(rowHumid);
                         if (isNaN(val)) throw new Error("Invalid humidity");
                         if (val < 0.0 || val > 100.0) {
                             errors.push({ row: rowNum, field: "humidity", reason: `Humidity ${val}% falls outside range [0, 100].` });

@@ -4,16 +4,41 @@
 
 @layer base {
   body {
-    background-color: theme('colors.background');
-    color: theme('colors.text.primary');
-    font-family: theme('fontFamily.sans');
+    background-color: #F1F5F3 !important;
+    color: #102A33 !important;
+    font-family: 'Inter', sans-serif !important;
   }
+}
+
+@layer utilities {
+  .bg-background { background-color: #F1F5F3 !important; }
+  .bg-surface-primary { background-color: #FFFFFF !important; }
+  .bg-surface-secondary { background-color: #F7F9F8 !important; }
+  .bg-surface-dark { background-color: #102A33 !important; }
+  .border-border { border-color: #DCE5E2 !important; }
+  .border-interactive { border-color: #DCE5E2 !important; }
+  .border-divider { border-color: #DCE5E2 !important; }
+  .bg-border { background-color: #DCE5E2 !important; }
+  .text-text-primary { color: #102A33 !important; }
+  .text-text-secondary { color: #66777D !important; }
+  .text-text-muted { color: #66777D !important; opacity: 0.8; }
+  .bg-telemetry { background-color: #08A6B8 !important; }
+  .text-telemetry { color: #08A6B8 !important; }
+  .border-telemetry { border-color: #08A6B8 !important; }
+  .text-safe { color: #22C55E !important; }
+  .bg-safe { background-color: #22C55E !important; }
+  .text-warning { color: #EAB308 !important; }
+  .bg-warning { background-color: #EAB308 !important; }
+  .text-hazardous { color: #EF4444 !important; }
+  .bg-hazardous { background-color: #EF4444 !important; }
+  .shadow-card { box-shadow: 0 4px 16px rgba(16, 42, 51, 0.05) !important; }
+  .shadow-soft { box-shadow: 0 2px 8px rgba(16, 42, 51, 0.03) !important; }
 }
 
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background: #070B10 !important;
+  background: #F7F9F8 !important;
 }
 
 /* Custom scrollbar */
@@ -23,14 +48,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: theme('colors.surface.primary');
+  background: #FFFFFF;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: theme('colors.border.DEFAULT');
+  background: #DDE5E2;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: theme('colors.text.muted');
+  background: #8C9EA4;
 }

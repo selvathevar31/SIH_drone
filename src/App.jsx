@@ -9,7 +9,7 @@ import FlightHistory from './components/FlightHistory';
 import HistoricalComparison from './components/HistoricalComparison';
 import PublicDashboard from './components/PublicDashboard';
 import SettingsPanel from './components/SettingsPanel';
-import MissionReplay from './components/MissionReplay';
+import MissionAnalytics from './components/MissionAnalytics';
 import { getMissions, getDashboard } from './services/api';
 import { Clock } from 'lucide-react';
 import PollutionTrendChart from './components/PollutionTrendChart';
@@ -18,6 +18,8 @@ import AQIHeatmap from './components/AQIHeatmap';
 import EnvironmentalMetrics from './components/EnvironmentalMetrics';
 import KeyInsights from './components/KeyInsights';
 import DatasetSelector, { cityColor } from './components/DatasetSelector';
+import PollutantProfile from './components/PollutantProfile';
+import OverviewAnalyticsCard from './components/OverviewAnalyticsCard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function extractCityLabel(missionId, dataSource) {
@@ -341,61 +343,61 @@ function App() {
           {currentView === 'comparison' && <HistoricalComparison missions={missions} />}
           {currentView === 'public'     && <PublicDashboard />}
           {currentView === 'settings'   && <SettingsPanel />}
-          {currentView === 'replay' && activeDatasetId && dashboardData && (
-            <MissionReplay
+          {currentView === 'mission_analytics' && activeDatasetId && dashboardData && (
+            <MissionAnalytics
               missionId={activeDatasetId}
               dashboardData={dashboardData}
-              onExit={() => setCurrentView('overview')}
+              telemetryData={telemetryData}
             />
           )}
 
           {/* ── OVERVIEW ─────────────────────────────────────────────────── */}
           {hasData && !isLoading && !error && currentView === 'overview' && (
-            <div className="max-w-[1920px] mx-auto flex flex-col gap-6">
+            <div className="max-w-[1920px] mx-auto flex flex-col gap-8 px-2">
 
-              {/* SECTION 1: OVERVIEW HEADER */}
-              <div className="flex justify-between items-center bg-surface-primary px-5 py-3 rounded-lg border border-border shadow-sm">
-                <div className="flex items-center gap-6">
+              {/* SECTION 1: OVERVIEW HEADER (STATUS CARD) */}
+              <div className="flex justify-between items-center bg-surface-primary border border-border shadow-soft rounded-[14px] px-6 py-4">
+                <div className="flex items-center gap-8">
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Mission ID</span>
-                    <span className="text-sm font-mono font-bold text-text-primary">{effectiveMission?.mission_id || activeDatasetId}</span>
+                    <span className="text-[10px] text-text-muted font-bold tracking-[0.15em] uppercase mb-1">Mission ID</span>
+                    <span className="text-sm font-mono font-medium text-text-primary tracking-tight">{effectiveMission?.mission_id || activeDatasetId}</span>
                   </div>
                   {hoveredDatasetId && hoveredDatasetId !== activeDatasetId && (
                     <>
-                      <div className="h-8 w-px bg-border" />
+                      <div className="h-8 w-px bg-border-divider" />
                       <div className="flex flex-col">
-                        <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Viewing Area</span>
-                        <span className="text-sm font-bold text-text-primary">
+                        <span className="text-[10px] text-text-muted font-bold tracking-[0.15em] uppercase mb-1">Viewing Area</span>
+                        <span className="text-sm font-medium text-text-primary">
                           {datasetStore.get(hoveredDatasetId)?.cityLabel || hoveredDatasetId}
                         </span>
                       </div>
                     </>
                   )}
-                  <div className="h-8 w-px bg-border" />
+                  <div className="h-8 w-px bg-border-divider" />
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">System Status</span>
+                    <span className="text-[10px] text-text-muted font-bold tracking-[0.15em] uppercase mb-1">System Status</span>
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-safe animate-pulse" />
-                      <span className="text-xs font-bold text-safe uppercase tracking-wider">Nominal</span>
+                      <div className="w-2 h-2 rounded-full bg-safe shadow-[0_0_8px_rgba(46,155,112,0.4)] animate-pulse" />
+                      <span className="text-xs font-bold text-safe uppercase tracking-wider">Online</span>
                     </div>
                   </div>
-                  <div className="h-8 w-px bg-border hidden md:block" />
+                  <div className="h-8 w-px bg-border-divider hidden md:block" />
                   <div className="hidden md:flex flex-col">
-                    <span className="text-[10px] text-text-muted font-bold tracking-widest uppercase mb-0.5">Drone State</span>
-                    <span className="text-xs font-bold text-text-primary uppercase tracking-wider">Active Survey</span>
+                    <span className="text-[10px] text-text-muted font-bold tracking-[0.15em] uppercase mb-1">Drone State</span>
+                    <span className="text-xs font-medium text-text-primary">Historical Survey</span>
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-3">
-                  <span className="hidden lg:flex items-center gap-2 text-text-muted text-[10px] font-bold uppercase tracking-widest">
-                    <Clock className="w-3.5 h-3.5" /> Time Filter
+                <div className="flex items-center gap-5">
+                  <span className="hidden lg:flex items-center text-text-muted text-[10px] font-bold uppercase tracking-widest">
+                    Time Filter
                   </span>
-                  <div className="flex gap-1 bg-surface-secondary p-1 rounded border border-border">
+                  <div className="flex gap-1.5">
                     {['ALL', '30M', '15M', '5M'].map(tf => (
                       <button
                         key={tf}
                         onClick={() => setTimeFilter(tf)}
-                        className={`px-3 py-1 text-xs font-bold uppercase tracking-widest rounded transition-colors ${timeFilter === tf ? 'bg-surface-primary shadow-sm text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
+                        className={`px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded transition-all ${timeFilter === tf ? 'bg-telemetry/10 text-telemetry border border-telemetry/20' : 'text-text-muted border border-transparent hover:text-text-primary hover:bg-surface-secondary'}`}
                       >
                         {tf === 'ALL' ? 'Full' : tf}
                       </button>
@@ -405,16 +407,21 @@ function App() {
               </div>
 
               {/* SECTION 2: ENVIRONMENTAL METRICS */}
-              <EnvironmentalMetrics 
-                stats={effectiveEntry?.dashboardData?.mission_stats} 
-                current={telemetryData.length > 0 ? telemetryData[telemetryData.length - 1] : dashboardData?.current_environment} 
+              <EnvironmentalMetrics
+                aqi={dashboardData?.current_environment?.aqi}
+                pm25={dashboardData?.current_environment?.pm25}
+                pm10={dashboardData?.current_environment?.pm10}
+                temp={dashboardData?.current_environment?.temperature}
+                hum={dashboardData?.current_environment?.humidity}
+                stats={dashboardData?.mission_stats}
+                telemetry={telemetryData}
               />
 
               {/* SECTION 3: SPATIAL INTELLIGENCE (60% Heatmap / 40% Insights) */}
-              <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-10 gap-8 items-start">
                 
                 {/* LEFT 60% — Mapbox Heatmap */}
-                <div className="col-span-1 lg:col-span-6 h-[700px] shadow-md rounded-lg overflow-hidden border border-border flex flex-col">
+                <div className="col-span-1 lg:col-span-6 h-[720px] rounded-[16px] overflow-hidden border border-border shadow-card flex flex-col bg-surface-primary">
                   <AQIHeatmap
                     datasets={datasetsArray}
                     activeDatasetId={activeDatasetId}
@@ -424,7 +431,7 @@ function App() {
                 </div>
 
                 {/* RIGHT 40% — Key Insights */}
-                <div className="col-span-1 lg:col-span-4 h-[700px]">
+                <div className="col-span-1 lg:col-span-4 h-[720px]">
                   <KeyInsights 
                     telemetry={effectiveEntry?.telemetry || []}
                     stats={effectiveEntry?.dashboardData?.mission_stats}
@@ -432,6 +439,32 @@ function App() {
                   />
                 </div>
                 
+              </div>
+
+              {/* SECTION 4: POLLUTION TREND (Full Width) */}
+              <div className="mt-8">
+                <PollutionTrendChart data={telemetryData} />
+              </div>
+
+              {/* SECTION 5: ANALYTICS ROW (3 Columns) */}
+              <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* 1. Pollutant Profile */}
+                <div className="h-80">
+                  <PollutantProfile telemetryData={telemetryData} />
+                </div>
+
+                {/* 2. Pollution by Altitude */}
+                <div className="h-80">
+                  <PollutionAltitudeChart data={telemetryData} />
+                </div>
+
+                {/* 3. Flight/Mission Analytics */}
+                <div className="h-80">
+                  <OverviewAnalyticsCard 
+                    dashboardData={effectiveEntry?.dashboardData} 
+                    telemetryData={telemetryData} 
+                  />
+                </div>
               </div>
 
             </div>

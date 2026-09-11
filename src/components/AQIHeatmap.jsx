@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import Map, { Source, Layer, Popup, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Thermometer, MapPin, Info, Activity, Terminal } from 'lucide-react';
+import { Thermometer, MapPin, Info, Activity, Terminal, X } from 'lucide-react';
 import { cityColor } from './DatasetSelector';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -78,11 +78,12 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
   // ─── Build GeoJSON FeatureCollection ─────────────────────────────────────────
   const geojson = useMemo(() => {
     const features = [];
-    resolvedDatasets.forEach((ds, dsIdx) => {
-      const dsColor = cityColor(dsIdx);
-      const isActive = ds.missionId === (activeDatasetId || 'default');
+    
+    if (activeDs) {
+      const dsIdx = resolvedDatasets.indexOf(activeDs);
+      const dsColor = cityColor(dsIdx >= 0 ? dsIdx : 0);
       
-      const pts = (ds.telemetry || []).filter(p => 
+      const pts = (activeDs.telemetry || []).filter(p => 
         isFinite(p.latitude) && isFinite(p.longitude) && 
         p.latitude > -90 && p.latitude < 90 && 
         p.longitude > -180 && p.longitude < 180
@@ -98,17 +99,17 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
             pm10: isFinite(p.pm10) ? p.pm10 : 0,
             altitude: p.altitude,
             timestamp: p.timestamp,
-            missionId: ds.missionId,
-            cityLabel: ds.cityLabel,
+            missionId: activeDs.missionId,
+            cityLabel: activeDs.cityLabel,
             dsColor: dsColor,
-            isActive: isActive ? 1 : 0
+            isActive: 1
           }
         });
       });
-    });
+    }
     
     return { type: 'FeatureCollection', features };
-  }, [resolvedDatasets, activeDatasetId]);
+  }, [activeDs, resolvedDatasets]);
 
   useEffect(() => {
     addDebug(`GeoJSON generated with ${geojson.features.length} points.`);
@@ -168,37 +169,51 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
     id: 'pollution-heatmap',
     type: 'heatmap',
     source: 'pollution',
-    maxzoom: 15,
+    maxzoom: 16,
     paint: {
       'heatmap-weight': [
         'interpolate', ['linear'], ['get', config.property],
         0, 0,
-        config.max, 1
+        config.max * 0.2, 0.1,
+        config.max * 0.4, 0.3,
+        config.max * 0.7, 0.6,
+        config.max, 1.5
+      ],
+      // Intensity scales UP as you zoom IN
+      'heatmap-intensity': [
+        'interpolate', ['linear'], ['zoom'],
+        9, 0.5,
+        12, 1.2,
+        16, 2.5
       ],
       'heatmap-color': [
         'interpolate', ['linear'], ['heatmap-density'],
         0, 'rgba(34, 197, 94, 0)',
-        0.2, '#22C55E', // Green
-        0.4, '#EAB308', // Yellow
-        0.6, '#F97316', // Orange
-        0.8, '#EF4444', // Red
-        1.0, '#7F1D1D'  // Dark Red
+        0.1, '#22C55E', // Low (Green)
+        0.3, '#84CC16', // Moderate (Yellow-Green)
+        0.5, '#FACC15', // Elevated (Yellow)
+        0.7, '#F97316', // High (Orange)
+        0.9, '#EF4444', // Very High (Red)
+        1.0, '#991B1B'  // Critical (Dark Red Core)
       ],
+      // Radius DECREASES as you zoom IN
       'heatmap-radius': [
         'interpolate', ['linear'], ['zoom'],
-        0, 2,
-        9, 20,
-        15, 40
+        0, 60,
+        9, 60,  // Large smooth influence when zoomed out
+        12, 35, // Starts reducing
+        15, 20, // Tighter cores
+        18, 15  // Very distinct at street level
       ],
       'heatmap-opacity': [
         'interpolate', ['linear'], ['zoom'],
-        7, 1,
-        15, 0.5
+        7, 0.5,
+        15, 0.8
       ]
     }
   };
 
-  // The point layer
+  // The point layer (secondary evidence)
   const circleLayer = {
     id: 'pollution-points',
     type: 'circle',
@@ -207,37 +222,40 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
     paint: {
       'circle-radius': [
         'interpolate', ['linear'], ['zoom'],
-        11, 3,
-        16, 8
+        11, 2,
+        16, ['interpolate', ['linear'], ['get', config.property], 0, 4, config.max, 7]
       ],
       'circle-color': [
         'interpolate', ['linear'], ['get', config.property],
         0, '#22C55E',
-        config.max * 0.33, '#EAB308',
-        config.max * 0.66, '#F97316',
-        config.max, '#EF4444',
-        config.max * 1.5, '#7F1D1D'
+        config.max * 0.2, '#84CC16',
+        config.max * 0.4, '#FACC15',
+        config.max * 0.6, '#F97316',
+        config.max * 0.8, '#EF4444',
+        config.max, '#991B1B'
       ],
+      // Points fade in as you zoom in
       'circle-opacity': [
-        'case',
-        ['==', ['get', 'isActive'], 1], 0.9,
-        0.3
+        'interpolate', ['linear'], ['zoom'],
+        11, 0,
+        13, 0.4,
+        16, 0.9
       ],
       'circle-stroke-width': 1,
-      'circle-stroke-color': 'rgba(255,255,255,0.4)'
+      'circle-stroke-color': 'rgba(255, 255, 255, 0.9)'
     }
   };
 
   // ─── Interaction Handlers ───────────────────────────────────────────────────
   const onHover = useCallback(event => {
-    const { features, point: { x, y } } = event;
+    const { features, point } = event;
     const hoveredFeature = features && features[0];
 
-    if (hoveredFeature) {
+    if (hoveredFeature && point) {
       setHoverInfo({
         feature: hoveredFeature,
-        x,
-        y
+        x: point.x,
+        y: point.y
       });
       if (onDatasetHover) onDatasetHover(hoveredFeature.properties.missionId);
     } else {
@@ -260,30 +278,25 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
   }, [activeDs, config.property]);
 
   return (
-    <div className="border border-border rounded-lg bg-surface-primary overflow-hidden flex flex-col shadow-sm h-full w-full relative">
+    <div className="flex flex-col h-full w-full relative">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b border-border bg-surface-primary z-10">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded bg-telemetry/10 border border-telemetry/30">
-            <Thermometer className="w-4 h-4 text-telemetry" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold tracking-widest text-text-primary uppercase">Pollution Heatmap</h2>
-            <p className="text-[10px] text-text-muted font-mono tracking-wider">
-              Mapbox GL · {resolvedDatasets.length} dataset{resolvedDatasets.length !== 1 ? 's' : ''}
-            </p>
-          </div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-5 border-b border-border bg-surface-primary z-10">
+        <div className="flex flex-col">
+          <h2 className="text-[12px] font-bold tracking-[0.15em] text-surface-dark uppercase mb-1">Pollution Heatmap</h2>
+          <p className="text-[10px] font-medium text-text-secondary tracking-wide">
+            Spatial pollution distribution
+          </p>
         </div>
 
         {/* Metric Selector */}
-        <div className="flex bg-surface-secondary p-1 rounded border border-border z-20 pointer-events-auto">
+        <div className="flex gap-2 z-20 pointer-events-auto">
           {METRICS.map(m => (
             <button
               key={m}
               onClick={() => setSelectedMetric(m)}
-              className={`px-3 py-1 text-xs font-bold tracking-widest uppercase rounded transition-colors ${
-                selectedMetric === m ? 'bg-telemetry text-background shadow' : 'text-text-muted hover:text-text-primary'
+              className={`px-3.5 py-1.5 text-[10px] font-bold tracking-[0.1em] uppercase rounded transition-colors ${
+                selectedMetric === m ? 'bg-telemetry/10 text-telemetry border border-telemetry/20' : 'text-text-muted hover:text-text-primary hover:bg-surface-secondary border border-transparent'
               }`}
             >
               {m}
@@ -294,11 +307,9 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
         {stats && (
           <div className="hidden xl:flex items-center gap-4 font-mono text-[10px] text-text-secondary">
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-text-muted" />{stats.count}
+              <MapPin className="w-3 h-3 text-text-muted" />{stats.count} points
             </span>
-            <span>Min <b style={{ color: getMetricMeta(stats.min, selectedMetric).color }}>{stats.min.toFixed(0)}</b></span>
-            <span>Avg <b style={{ color: getMetricMeta(stats.avg, selectedMetric).color }}>{stats.avg.toFixed(0)}</b></span>
-            <span>Max <b style={{ color: getMetricMeta(stats.max, selectedMetric).color }}>{stats.max.toFixed(0)}</b></span>
+            <span>Peak <b style={{ color: getMetricMeta(stats.max, selectedMetric).color }}>{stats.max.toFixed(0)}</b></span>
           </div>
         )}
       </div>
@@ -337,14 +348,14 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
           <Map
             ref={mapRef}
             initialViewState={initialViewState}
-            mapStyle="mapbox://styles/mapbox/light-v11"
+            mapStyle="mapbox://styles/mapbox/dark-v11"
             mapboxAccessToken={MAPBOX_TOKEN}
+            style={{ width: '100%', height: '100%', minHeight: '500px', position: 'absolute', top: 0, left: 0 }}
             interactiveLayerIds={['pollution-points']}
             onMouseMove={onHover}
             onMouseLeave={() => onHover({ features: [] })}
             onLoad={onMapLoad}
             onError={onMapError}
-            style={{ width: '100%', height: '100%', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
           >
             <Source id="pollution" type="geojson" data={geojson}>
               <Layer {...heatmapLayer} />
@@ -363,46 +374,69 @@ export default function AQIHeatmap({ datasets, activeDatasetId, hoveredDatasetId
                 className="fluxx-mapbox-popup"
                 maxWidth="300px"
               >
-                <div className="bg-surface-elevated border border-border p-3 rounded shadow-2xl text-text-primary" style={{ minWidth: '220px' }}>
-                  <div className="flex items-center gap-2 mb-2 border-b border-border/50 pb-2">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ background: hoverInfo.feature.properties.dsColor }} />
-                    <span className="text-xs font-bold uppercase tracking-widest" style={{ color: hoverInfo.feature.properties.dsColor }}>
-                      {hoverInfo.feature.properties.cityLabel}
+                <div className="bg-surface-primary p-4 rounded-[12px] shadow-card text-text-primary relative" style={{ minWidth: '220px' }}>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setHoverInfo(null); }}
+                    className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full border border-border bg-surface-secondary text-text-muted hover:text-text-primary hover:bg-border transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="flex items-center gap-2 mb-3 pr-6">
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: hoverInfo.feature.properties.dsColor || '#08A6B8' }} />
+                    <span className="text-[12px] font-bold uppercase tracking-widest text-text-primary">
+                      {hoverInfo.feature.properties.cityLabel || 'Observation'}
                     </span>
                   </div>
-                  <div className="font-mono text-[11px] text-text-secondary flex flex-col gap-1.5">
+                  <div className="font-mono text-[11px] text-text-secondary flex flex-col gap-2">
                     {['AQI', 'PM2.5', 'PM10'].map(k => {
                       const val = hoverInfo.feature.properties[k.toLowerCase().replace('.', '')];
                       const isSelected = selectedMetric === k;
                       const meta = getMetricMeta(val, k);
                       return (
-                        <div key={k} className={`flex justify-between items-center ${isSelected ? 'bg-surface-secondary/50 p-1 -mx-1 rounded' : ''}`}>
-                          <span className={isSelected ? 'text-text-primary font-bold' : ''}>{k}:</span>
+                        <div key={k} className={`flex justify-between items-center ${isSelected ? 'bg-telemetry/10 px-2 py-1 -mx-2 rounded-md' : ''}`}>
+                          <span className={isSelected ? 'text-text-primary font-bold tracking-wide' : 'tracking-wide'}>{k}</span>
                           <div className="flex items-center gap-2">
                             {isSelected && <Activity className="w-3 h-3 text-telemetry" />}
-                            <span className="font-bold" style={{ color: meta.color }}>
+                            <span className="font-bold text-[12px]" style={{ color: meta.color }}>
                               {val ? val.toFixed(1) : '—'}
                             </span>
                           </div>
                         </div>
                       );
                     })}
-                    <div className="flex justify-between mt-1">
-                      <span>Altitude:</span>
-                      <span className="text-text-primary">
+                    <div className="flex justify-between mt-2 pt-2 border-t border-border">
+                      <span className="tracking-wide">Altitude:</span>
+                      <span className="text-text-primary font-bold">
                         {hoverInfo.feature.properties.altitude ? `${hoverInfo.feature.properties.altitude.toFixed(1)} m` : '—'}
                       </span>
                     </div>
                     {hoverInfo.feature.properties.timestamp && (
-                      <div className="flex justify-between gap-4 pt-2 mt-1 border-t border-border/50">
-                        <span className="text-[10px]">Time</span>
-                        <span className="text-text-muted text-[10px]">{new Date(hoverInfo.feature.properties.timestamp).toLocaleTimeString()}</span>
+                      <div className="flex justify-between mt-1">
+                        <span className="tracking-wide">Time:</span>
+                        <span className="text-text-primary font-bold">{new Date(hoverInfo.feature.properties.timestamp).toLocaleTimeString()}</span>
                       </div>
                     )}
                   </div>
                 </div>
               </Popup>
             )}
+
+            {/* Map Legend */}
+            <div className="absolute bottom-6 right-6 bg-surface-primary border border-border shadow-card rounded-lg px-4 py-3 z-20 pointer-events-auto flex flex-col gap-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Low</span>
+                <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">High</span>
+              </div>
+              <div className="w-64 h-2 rounded-full" style={{ background: 'linear-gradient(to right, #22C55E, #84CC16, #FACC15, #F97316, #EF4444, #991B1B)' }} />
+              <div className="flex justify-between w-64 mt-1">
+                <span className="text-[9px] font-mono text-text-muted">0</span>
+                <span className="text-[9px] font-mono text-text-muted">{Math.round(config.max * 0.2)}</span>
+                <span className="text-[9px] font-mono text-text-muted">{Math.round(config.max * 0.4)}</span>
+                <span className="text-[9px] font-mono text-text-muted">{Math.round(config.max * 0.6)}</span>
+                <span className="text-[9px] font-mono text-text-muted">{Math.round(config.max * 0.8)}</span>
+                <span className="text-[9px] font-mono text-text-muted">{config.max}</span>
+              </div>
+            </div>
           </Map>
         ) : (
           <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center bg-surface-secondary">

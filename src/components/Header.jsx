@@ -15,12 +15,12 @@ export default function Header({
   
   // Calculate Drone Mode
   const getDroneStatus = () => {
-    if (!backendOnline) return 'OFFLINE';
-    if (!isLive) return 'HISTORICAL SURVEY';
+    if (!backendOnline) return 'Offline';
+    if (!isLive) return 'Historical Survey';
     if (liveData && liveData.status) {
-      return liveData.status.toUpperCase();
+      return liveData.status.charAt(0).toUpperCase() + liveData.status.slice(1).toLowerCase();
     }
-    return 'IDLE';
+    return 'Idle';
   };
 
   const getDroneStatusColor = () => {
@@ -59,93 +59,91 @@ export default function Header({
     return <span className="text-[10px] font-mono text-text-muted uppercase">CONNECTING...</span>;
   };
 
-  const currentMode = freshness === 'REPLAY' ? 'REPLAY MODE' : isLive ? 'LIVE MODE' : 'HISTORICAL MODE';
+  const currentMode = freshness === 'REPLAY' ? 'Replay Mode' : isLive ? 'Live Mode' : 'Historical Mode';
   const modeColor = freshness === 'REPLAY' ? 'bg-telemetry text-background shadow-[0_0_10px_rgba(56,189,248,0.5)]' : isLive ? 'bg-safe text-background shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-surface-secondary text-text-secondary';
 
 
   return (
-    <header className="h-20 border-b border-border bg-surface-primary flex items-center justify-between px-6 shrink-0 relative z-50">
+    <header className="h-16 border-b border-border/60 bg-surface-primary flex items-center justify-between px-8 shrink-0 relative z-50">
       
-      {/* Brand Logo */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded bg-surface-elevated flex items-center justify-center border border-border">
-          <Navigation2 className="text-telemetry w-6 h-6 transform rotate-45" />
+      {/* Brand Logo & Basic Mode */}
+      <div className="flex items-center gap-4">
+        <div className="flex flex-col">
+          <h1 className="font-bold text-sm tracking-[0.15em] text-surface-dark uppercase">QUDRACOPTER</h1>
+          <span className="text-[8px] font-bold tracking-[0.2em] text-telemetry uppercase">Aerial Air Quality Control</span>
         </div>
-        <div>
-          <h1 className="font-bold text-base leading-tight tracking-wide text-text-primary">QUDRACOPTER</h1>
-          <p className="text-[9px] uppercase tracking-wider text-telemetry font-mono">Aerial Air Quality Control</p>
-        </div>
-        <div className={`ml-4 px-2 py-1 rounded text-[10px] font-bold tracking-widest uppercase ${modeColor}`}>
+        <div className="h-6 w-px bg-border/80 mx-2" />
+        <span className={`text-[10px] font-bold tracking-widest uppercase ${freshness === 'REPLAY' ? 'text-telemetry' : isLive ? 'text-safe' : 'text-text-secondary'}`}>
           {currentMode}
-        </div>
+        </span>
       </div>
 
-      {/* Grid of statuses requested in Spec 5 */}
-      <div className="flex items-center gap-6 text-[10px] font-mono text-text-muted">
+      {/* Center: System Status Strip */}
+      <div className="flex items-center gap-6 text-[11px] text-text-muted">
         
-        {/* System Status */}
-        <div className="flex flex-col">
-          <span className="uppercase tracking-widest text-[8px] mb-0.5">System</span>
-          <span className={`font-bold flex items-center gap-1 ${backendOnline ? 'text-safe' : 'text-hazardous'}`}>
-            ● {backendOnline ? 'ONLINE' : 'OFFLINE'}
+        <div className="flex items-center gap-2">
+          <span className="uppercase tracking-widest text-[9px]">System</span>
+          <span className={`font-medium flex items-center gap-1 ${backendOnline ? 'text-safe' : 'text-hazardous'}`}>
+            {backendOnline ? 'Online' : 'Offline'}
           </span>
         </div>
 
-        {/* Drone Status */}
-        <div className="flex flex-col border-l border-border/55 pl-6">
-          <span className="uppercase tracking-widest text-[8px] mb-0.5">Drone</span>
-          <span className={`font-bold flex items-center gap-1 ${getDroneStatusColor()}`}>
-            ● {getDroneStatus()}
+        <div className="h-3 w-px bg-border/60" />
+
+        <div className="flex items-center gap-2">
+          <span className="uppercase tracking-widest text-[9px]">Drone</span>
+          <span className={`font-medium flex items-center gap-1 ${getDroneStatusColor()}`}>
+            {getDroneStatus()}
           </span>
         </div>
 
-        {/* Mission Status */}
-        <div className="flex flex-col border-l border-border/55 pl-6">
-          <span className="uppercase tracking-widest text-[8px] mb-0.5">Mission</span>
-          <span className="font-bold text-text-primary">{selectedMission || 'NONE'}</span>
+        <div className="h-3 w-px bg-border/60" />
+
+        <div className="flex items-center gap-2">
+          <span className="uppercase tracking-widest text-[9px]">Mission</span>
+          <span className="font-medium text-text-primary">{selectedMission || 'NONE'}</span>
         </div>
 
-        {/* Data Freshness */}
-        <div className="flex flex-col border-l border-border/55 pl-6">
-          <span className="uppercase tracking-widest text-[8px] mb-0.5">Last Updated</span>
-          <span className="text-text-secondary flex flex-col gap-0.5">
-            <span className="text-text-primary font-bold">{lastUpdated || 'N/A'}</span>
-            {getFreshnessBadge()}
-          </span>
+        <div className="h-3 w-px bg-border/60" />
+
+        <div className="flex items-center gap-2">
+          <span className="uppercase tracking-widest text-[9px]">Last Updated</span>
+          <span className="text-text-primary font-medium">{lastUpdated || 'N/A'}</span>
+          <span className="ml-1">{getFreshnessBadge()}</span>
         </div>
 
       </div>
       
       {/* Controls: Mission dropdown & Live toggle */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-4">
         
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <select 
-              value={selectedMission} 
-              onChange={(e) => setSelectedMission(e.target.value)}
-              className="appearance-none bg-surface-secondary border border-border rounded-md px-3 py-1.5 pr-8 text-sm font-mono text-text-primary focus:outline-none focus:border-telemetry transition-colors cursor-pointer"
-            >
-              {missions.length === 0 && <option value="">No Missions</option>}
-              {missions.map(m => (
-                <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-text-muted absolute right-2 top-2 pointer-events-none" />
-          </div>
+        <div className="relative">
+          <select 
+            value={selectedMission} 
+            onChange={(e) => setSelectedMission(e.target.value)}
+            className="appearance-none bg-transparent border-none text-[11px] font-medium text-text-primary focus:outline-none cursor-pointer pr-4 hover:text-telemetry transition-colors uppercase tracking-wide"
+          >
+            {missions.length === 0 && <option value="">No Missions</option>}
+            {missions.map(m => (
+              <option key={m.mission_id} value={m.mission_id}>{m.mission_id}</option>
+            ))}
+          </select>
+          <ChevronDown className="w-3 h-3 text-text-muted absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
+        <div className="h-4 w-px bg-border/80" />
+
         {/* Live / History Toggle */}
-        <div className="flex items-center bg-surface-secondary rounded-full p-1 border border-border">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsLive(false)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase transition-colors ${!isLive ? 'bg-surface-elevated text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+            className={`text-[10px] font-bold tracking-[0.1em] uppercase transition-colors ${!isLive ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
           >
             History
           </button>
           <button 
             onClick={() => setIsLive(true)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase flex items-center gap-1.5 transition-colors ${isLive ? 'bg-surface-elevated text-safe shadow-sm border border-safe/20' : 'text-text-muted hover:text-text-primary'}`}
+            className={`text-[10px] font-bold tracking-[0.1em] uppercase flex items-center gap-1.5 transition-colors ${isLive ? 'text-safe' : 'text-text-muted hover:text-text-primary'}`}
           >
             {isLive && <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse"></span>}
             Live

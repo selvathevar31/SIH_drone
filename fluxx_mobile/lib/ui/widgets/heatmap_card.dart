@@ -47,7 +47,7 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
     // If data already arrived before style loaded, update it now
     final initialData = ref.read(liveTelemetryStreamProvider).valueOrNull?.geoJson;
     if (initialData != null) {
-      mapboxMap?.style.updateGeoJsonSource("aqi-source", initialData);
+      mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", initialData);
     }
   }
 
@@ -59,7 +59,7 @@ class _HeatmapCardState extends ConsumerState<HeatmapCard> {
     ref.listen(liveTelemetryStreamProvider, (previous, next) {
       final geoJsonString = next.valueOrNull?.geoJson;
       if (isStyleLoaded && mapboxMap != null && geoJsonString != null) {
-        mapboxMap?.style.updateGeoJsonSource("aqi-source", geoJsonString);
+        mapboxMap?.style.setStyleSourceProperty("aqi-source", "data", geoJsonString);
       }
     });
 
