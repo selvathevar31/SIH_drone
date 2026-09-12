@@ -120,32 +120,32 @@ export default function EnvironmentalMetrics({ aqi, pm25, pm10, temp, hum, stats
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 w-full">
       
       {/* PRIMARY AQI CARD */}
-      <div className="bg-surface-primary border border-border shadow-card rounded-[16px] p-6 flex flex-col justify-between relative overflow-hidden">
-        <div className="flex justify-between items-start mb-6">
+      <div className="bg-surface-primary border border-border shadow-card rounded-[16px] p-5 flex flex-col justify-between relative overflow-hidden">
+        <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-hazardous" />
-            <span className="text-[12px] font-bold tracking-[0.1em] text-text-muted uppercase">Air Quality Index</span>
+            <span className="text-[11px] font-bold tracking-[0.1em] text-text-muted uppercase">Air Quality Index</span>
           </div>
+          <span 
+            className="text-[9px] font-bold px-2 py-1 rounded-full uppercase tracking-widest" 
+            style={{ backgroundColor: `${aqiColor}15`, color: aqiColor }}
+          >
+            {aqiLabel}
+          </span>
         </div>
         
         <div className="flex justify-between items-end">
           <div>
-            <div className="flex items-baseline gap-3 mb-2">
-              <span className="text-5xl font-mono font-bold text-text-primary tracking-tight">
+            <div className="mb-1">
+              <span className="text-4xl font-mono font-bold text-text-primary tracking-tight leading-none">
                 {formatNum(aqi)}
               </span>
-              <span 
-                className="text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-widest" 
-                style={{ backgroundColor: `${aqiColor}15`, color: aqiColor }}
-              >
-                {aqiLabel}
-              </span>
             </div>
-            <div className="text-[12px] text-text-secondary font-medium mt-2">
+            <div className="text-[11px] text-text-secondary font-medium mt-1">
               Peak observed <b className="font-mono text-hazardous ml-1">{formatNum(safeStats.max_aqi, true)}</b>
             </div>
           </div>
-          <div className="-mb-2 -mr-2 w-24 h-10 shrink-0">
+          <div className="-mb-2 -mr-2 w-16 h-8 shrink-0">
             <Sparkline data={aqiData} color={aqiColor} />
           </div>
         </div>

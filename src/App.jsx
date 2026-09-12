@@ -25,12 +25,20 @@ import OverviewAnalyticsCard from './components/OverviewAnalyticsCard';
 function extractCityLabel(missionId, dataSource) {
   // Try to derive a human-readable city name:
   // 1. From data_source (CSV filename without extension)
-  if (dataSource && typeof dataSource === 'string') {
+  if (dataSource && typeof dataSource === 'string' && dataSource.toUpperCase() !== 'CSV') {
     const name = dataSource.replace(/\.(csv|CSV)$/, '').replace(/[_-]/g, ' ').trim();
     if (name && name.length > 0) return name;
   }
-  // 2. Fallback: short mission ID
-  return missionId ? missionId.slice(0, 14) : 'Unknown';
+  // 2. Fallback to parsing mission_id (e.g., M-Anand-Vihar-02 -> Anand Vihar)
+  if (missionId) {
+    const parts = missionId.split('-');
+    if (parts.length >= 3) {
+      // Typically M-{City}-{Suffix} or SIM-{City}-{Suffix}
+      const cityParts = parts.slice(1, -1);
+      return cityParts.join(' ');
+    }
+  }
+  return 'Unknown Location';
 }
 
 function computeStats(telemetry) {
